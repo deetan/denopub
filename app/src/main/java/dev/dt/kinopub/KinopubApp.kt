@@ -1,0 +1,46 @@
+package dev.dt.kinopub
+
+import android.app.Application
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import dev.dt.kinopub.data.Repository
+import dev.dt.kinopub.data.api.KinopubApi
+import dev.dt.kinopub.data.auth.DeviceRegistration
+import dev.dt.kinopub.data.auth.TokenStore
+import dev.dt.kinopub.data.prefs.LocalPrefs
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import java.util.concurrent.TimeUnit
+
+/** Manual DI: one process-wide container, no framework. */
+class KinopubApp : Application(), SingletonImageLoader.Factory {
+    lateinit var container: AppContainer
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        container = AppContainer(this)
+    }
+
+    override fun newImageLoader(context: PlatformContext): ImageLoader =
+        ImageLoader.Builder(context)
+            .components { add(OkHttpNetworkFetcherFactory(callFactory = { container.http })) }
+            .build()
+}
+
+class AppContainer(app: Application) {
+    val http: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor(HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
+        })
+        .build()
+    val tokens = TokenStore(app)
+    val api = KinopubApi(http, tokens)
+    val prefs = LocalPrefs(app)
+    val repository = Repository(api, prefs)
+    val registration = DeviceRegistration(api)
+}
