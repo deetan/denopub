@@ -30,6 +30,14 @@ optimized for "resume what I'm watching in one click". Read in order:
   Track picks are saved on manual change and re-applied once per episode in `onTracksChanged`.
 - **Progress**: `marktime` every 30 s while playing, on pause, on exit; `toggle?status=1` at end,
   then auto-advance to the next episode (crossing seasons).
+- **Continue rows** are split adult / kids (`isKidsContent`: genre starts with "мульт" or "детск";
+  "Семейный" and "Аниме" deliberately excluded). Genres come from `/items/{id}`, cached per process.
+- **Every user action writes to kino.pub** (no local-only state besides track picks and the
+  wishlist seen-set): watched/unwatched = `watching/toggle?status=1|0` (episode, season, or every
+  season), "Начал смотреть" = `togglewatchlist` for serials / 1-second `marktime` for movies,
+  "Убрать из «Продолжить»" = `history/clear-for-item` + unsubscribe, wishlist = bookmarks add/remove.
+  Continue = history ∪ *subscribed* serials ∪ unfinished movies, so removal sticks.
+- **Long-press menus** (`ui/common/ActionMenu.kt`) on every card and episode row.
 - **Focus is the UI.** Every screen requests initial focus on its primary action (first Continue
   card / Play button / current audio chip). Lazy rows compose late → focus requests retry briefly.
 
@@ -37,7 +45,9 @@ optimized for "resume what I'm watching in one click". Read in order:
 
 - Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./gradlew :app:assembleDebug`
 - Run on TV: `scripts/tv.sh deploy` (needs `scripts/tv.sh connect <ip>` once). Logs: `scripts/tv.sh logs`.
-- No emulator set up yet; no tests yet.
+- Emulator: AVD `kino_tv` (system-images;android-34;android-tv;arm64-v8a, 1920×1080). Start with
+  `$ANDROID_HOME/emulator/emulator -avd kino_tv -no-snapshot-save`, then `adb install -r
+  app/build/outputs/apk/debug/app-debug.apk`. `adb shell input text` can't type Cyrillic. No tests yet.
 - Add an endpoint: DTO in `data/api/Models.kt` (nullable/defaulted fields; Json ignores unknown
   keys), method in `KinopubApi`, use from `Repository`. Update `docs/kinopub-api.md` if you
   verified something marked UNVERIFIED.
@@ -63,7 +73,19 @@ optimized for "resume what I'm watching in one click". Read in order:
 - HDR marking in `files[]` is UNVERIFIED; we only prefer `codec == "h265"` at equal height.
 - Client credentials are the Kodi plugin's public ones (`xbmc`). If kino.pub revokes them, ask
   support@kino.pub for own creds.
-- **Not verified on a real device yet** (as of 2026-10-16): compiles only.
+- **`watching/marktime` stores time but does NOT change status** (stays -1). "In progress" must be
+  computed as `time > 0 && status != 1` everywhere (Repository, Details). Wrong once → resume showed 0.
+- **Writes from `onCleared` must not use `viewModelScope`** (already cancelled) — use
+  `AppContainer.appScope`. Progress on exit was silently lost before this.
+- **Long-press opens a dialog while OK is still held**: its repeats/release would click the first
+  item. `ActionMenu` swallows OK until a fresh key-down (repeatCount == 0). Keep that guard.
+- `BasicTextField` swallows the D-pad on TV — Search moves focus out on ↓ manually.
+- Player Back: closes the tracks panel; otherwise exits immediately (OSD is not modal).
+- **Testing on the emulator uses the owner's real kino.pub account.** Never drive "mark watched" /
+  "remove" flows blind with adb — screenshot before every OK. (2026-10-16: a blind key sequence
+  marked a whole season watched; it was restored via the app.)
+- Verified on the Android TV emulator (AVD `kino_tv`, API 34, 1080p) on 2026-10-16: login, Home,
+  Details, Search, player with 4K HEVC + multi-audio hls4. **Not yet on the real Chromecast.**
 
 ## What NOT to touch
 
@@ -79,7 +101,7 @@ optimized for "resume what I'm watching in one click". Read in order:
 1. Verify on the Chromecast: login, Continue row, hls4 audio mapping, 4K/HDR file selection.
 2. Wishlist ingest: Telegram bot (phone → screenshot → vision model identifies title →
    kino.pub search → `bookmarks/add` to `Wishlist`).
-3. "Next episode in 10 s" card, skip-intro, search screen.
+3. "Next episode in 10 s" card, skip-intro, voice search.
 4. Recommendations from new releases + watch history.
 5. Visual polish via `docs/design-prompt.md`.
 

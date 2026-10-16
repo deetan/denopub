@@ -11,6 +11,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import dev.dt.kinopub.ui.common.splitTitle
+import dev.dt.kinopub.ui.common.ActionMenu
+import dev.dt.kinopub.ui.common.MenuAction
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.tv.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -55,14 +65,48 @@ import dev.dt.kinopub.ui.theme.K
  *  3. What's new on kinopub.
  */
 @Composable
-fun HomeScreen(c: AppContainer, onPlay: (ResumeTarget) -> Unit, onOpen: (Long) -> Unit) {
+fun HomeScreen(
+    c: AppContainer,
+    onPlay: (ResumeTarget) -> Unit,
+    onOpen: (Long) -> Unit,
+    onSearch: () -> Unit,
+) {
     val vm: HomeViewModel = viewModel(factory = viewModelFactory { initializer { HomeViewModel(c.repository) } })
+    remember { vm.refresh() } // once per visit, before the first read of state
     val state by vm.state.collectAsState()
-    LaunchedEffect(Unit) { vm.refresh() }
 
     val firstFocus = remember { FocusRequester() }
     var focusedOnce by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf<Pair<String, List<MenuAction>>?>(null) }
     val data = state.data
+
+    menu?.let { (title, actions) -> ActionMenu(title, actions) { menu = null } }
+
+    fun itemMenu(id: Long, title: String, inWishlist: Boolean) {
+        menu = title to listOfNotNull(
+            MenuAction("Открыть карточку") { onOpen(id) },
+            if (inWishlist) MenuAction("Убрать из вишлиста") { vm.setWishlisted(id, false) }
+            else MenuAction("Добавить в вишлист") { vm.setWishlisted(id, true) },
+            MenuAction("Начал смотреть", "добавить в «Продолжить»") { vm.setWatching(id) },
+            MenuAction("Отметить просмотренным") { vm.setItemWatched(id, true) },
+        )
+    }
+
+    fun continueMenu(e: ContinueEntry) {
+        menu = splitTitle(e.title).first to listOfNotNull(
+            MenuAction("Открыть карточку") { onOpen(e.itemId) },
+            e.episodeLabel?.let { ep ->
+                MenuAction("Отметить $ep просмотренной", "продолжить со следующей") {
+                    vm.setEpisodeWatched(e.itemId, e.target.season, e.target.episode)
+                }
+            },
+            MenuAction(if (e.isSerial) "Отметить весь сериал просмотренным" else "Отметить просмотренным") {
+                vm.setItemWatched(e.itemId, true)
+            },
+            MenuAction("Убрать из «Продолжить»", "очистить историю на kino.pub") { vm.removeFromContinue(e.itemId) },
+            MenuAction("Добавить в вишлист") { vm.setWishlisted(e.itemId, true) },
+        )
+    }
 
     if (data == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -74,45 +118,67 @@ fun HomeScreen(c: AppContainer, onPlay: (ResumeTarget) -> Unit, onOpen: (Long) -
         return
     }
 
-    LaunchedEffect(data) {
-        // Lazy rows compose a frame late; retry briefly until the first card exists.
+    val continueRow = rememberLazyListState()
+    val column = rememberLazyListState()
+    LaunchedEffect(state.loading) {
+        // Wait for the fresh load (order changes after every playback), then put focus on the
+        // first "continue" card. Lazy rows compose a frame late, so retry briefly.
+        if (state.loading || focusedOnce) return@LaunchedEffect
+        column.scrollToItem(0)
+        continueRow.scrollToItem(0)
         repeat(20) {
-            if (focusedOnce) return@LaunchedEffect
-            if (runCatching { firstFocus.requestFocus() }.isSuccess) focusedOnce = true
-            else kotlinx.coroutines.delay(50)
+            if (runCatching { firstFocus.requestFocus() }.isSuccess) { focusedOnce = true; return@LaunchedEffect }
+            kotlinx.coroutines.delay(50)
         }
     }
 
+    Box(
+        Modifier.fillMaxSize().onPreviewKeyEvent {
+            if (it.type == KeyEventType.KeyDown && it.key == Key.Search) { onSearch(); true } else false
+        },
+    ) {
     LazyColumn(
         Modifier.fillMaxSize(),
+        state = column,
         contentPadding = PaddingValues(bottom = K.screenPadV),
         verticalArrangement = Arrangement.spacedBy(K.rowGap),
     ) {
         if (data.continueWatching.isNotEmpty()) item("continue") {
-            // "Continue" owns the top half of the screen: a hero describing the focused
-            // title, then larger cards. This is the main use case of the app.
+            // "Continue" owns the top of the screen: a hero describing the focused title, then
+            // two compact rows — grown-up titles first, kids' (cartoons) second, so a child can
+            // find theirs without wading through the rest.
             var focused by remember { mutableStateOf(data.continueWatching.first()) }
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 ContinueHero(focused)
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = K.screenPadH),
-                    horizontalArrangement = Arrangement.spacedBy(K.cardGap),
-                ) {
-                    itemsIndexed(data.continueWatching, key = { _, e -> e.itemId }) { i, e ->
-                        ContinueCard(
-                            title = e.title,
-                            image = e.poster,
-                            episodeLabel = e.episodeLabel,
-                            meta = continueMeta(e),
-                            progress = e.progress,
-                            newBadge = e.newEpisodes.takeIf { it > 0 }?.let { "+$it" },
-                            onClick = { onPlay(e.target) },
-                            onLongClick = { onOpen(e.itemId) },
-                            width = 340.dp,
-                            modifier = Modifier
-                                .onFocusChanged { if (it.isFocused) focused = e }
-                                .then(if (i == 0) Modifier.focusRequester(firstFocus) else Modifier),
+                val rows = listOf("" to data.continueAdult, "Детям" to data.continueKids).filter { it.second.isNotEmpty() }
+                rows.forEachIndexed { r, (label, entries) ->
+                    if (label.isNotEmpty()) {
+                        Text(
+                            label, style = MaterialTheme.typography.titleMedium, color = K.text,
+                            modifier = Modifier.padding(horizontal = K.screenPadH),
                         )
+                    }
+                    LazyRow(
+                        state = if (r == 0) continueRow else rememberLazyListState(),
+                        contentPadding = PaddingValues(horizontal = K.screenPadH),
+                        horizontalArrangement = Arrangement.spacedBy(K.cardGap),
+                    ) {
+                        itemsIndexed(entries, key = { _, e -> e.itemId }) { i, e ->
+                            ContinueCard(
+                                title = splitTitle(e.title).first,
+                                image = e.poster,
+                                episodeLabel = e.episodeLabel,
+                                meta = continueMeta(e),
+                                progress = e.progress,
+                                newBadge = e.newEpisodes.takeIf { it > 0 }?.let { "+$it" },
+                                onClick = { onPlay(e.target) },
+                                onLongClick = { continueMenu(e) },
+                                width = 200.dp,
+                                modifier = Modifier
+                                    .onFocusChanged { if (it.isFocused) focused = e }
+                                    .then(if (r == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),
+                            )
+                        }
                     }
                 }
             }
@@ -126,13 +192,14 @@ fun HomeScreen(c: AppContainer, onPlay: (ResumeTarget) -> Unit, onOpen: (Long) -
                 ) {
                     items(data.wishlist, key = { it.item.id }) { w ->
                         PosterCard(
-                            title = w.item.title,
+                            title = splitTitle(w.item.title).first,
                             image = w.item.posters?.medium,
                             subtitle = w.item.year?.toString(),
                             badge = if (w.isNew) "НОВОЕ" else null,
                             onClick = { onOpen(w.item.id) },
+                            onLongClick = { itemMenu(w.item.id, splitTitle(w.item.title).first, inWishlist = true) },
                             modifier = Modifier
-                                .onFocusChanged { if (it.isFocused) vm.markSeen(w.item.id) }
+                                .onFocusChanged { if (it.isFocused) vm.onWishlistFocus(w.item.id) else vm.onWishlistBlur(w.item.id) }
                                 .then(if (data.continueWatching.isEmpty() && w == data.wishlist.first()) Modifier.focusRequester(firstFocus) else Modifier),
                         )
                     }
@@ -140,14 +207,29 @@ fun HomeScreen(c: AppContainer, onPlay: (ResumeTarget) -> Unit, onOpen: (Long) -
             }
         }
 
-        posterRow("Новые фильмы", data.freshMovies, onOpen)
-        posterRow("Новые сериалы", data.freshSerials, onOpen)
-        posterRow("Популярное", data.hot, onOpen)
+        val onMenu: (Item) -> Unit = { itemMenu(it.id, splitTitle(it.title).first, inWishlist = false) }
+        posterRow("Новые фильмы", data.freshMovies, onOpen, onMenu)
+        posterRow("Новые сериалы", data.freshSerials, onOpen, onMenu)
+        posterRow("Популярное", data.hot, onOpen, onMenu)
+    }
+        // Always-visible search entry, top-right; ↑ from the first row reaches it.
+        OutlinedButton(
+            onClick = onSearch,
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = K.screenPadV, end = K.screenPadH),
+        ) { Text("Поиск") }
+        state.message?.let {
+            Text(
+                it, color = K.text, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp)
+                    .background(K.surfaceHi, androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            )
+        }
     }
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.posterRow(
-    title: String, items: List<Item>, onOpen: (Long) -> Unit,
+    title: String, items: List<Item>, onOpen: (Long) -> Unit, onMenu: (Item) -> Unit,
 ) {
     if (items.isEmpty()) return
     item(title) {
@@ -158,11 +240,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.posterRow(
             ) {
                 items(items, key = { it.id }) { it ->
                     PosterCard(
-                        title = it.title,
+                        title = splitTitle(it.title).first,
                         image = it.posters?.medium,
                         subtitle = listOfNotNull(it.year?.toString(), it.imdbRating?.let { r -> "IMDb %.1f".format(r) })
                             .joinToString(" · "),
                         onClick = { onOpen(it.id) },
+                        onLongClick = { onMenu(it) },
                     )
                 }
             }
@@ -197,7 +280,7 @@ private fun continueMeta(e: ContinueEntry): String {
 /** Big description of the focused "continue" card: answers "what was this, where am I". */
 @Composable
 private fun ContinueHero(e: ContinueEntry) {
-    Box(Modifier.fillMaxWidth().height(230.dp)) {
+    Box(Modifier.fillMaxWidth().height(210.dp)) {
         AsyncImage(
             e.poster, null,
             Modifier.fillMaxSize(),
@@ -211,11 +294,12 @@ private fun ContinueHero(e: ContinueEntry) {
         )
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to K.bg)))
         Column(
-            Modifier.align(Alignment.BottomStart).padding(horizontal = K.screenPadH).width(560.dp),
+            Modifier.align(Alignment.BottomStart).padding(horizontal = K.screenPadH).width(760.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Продолжить", style = MaterialTheme.typography.labelMedium, color = K.accent)
-            Text(e.title, style = MaterialTheme.typography.displaySmall, color = K.text, maxLines = 1)
+            val (ru, original) = splitTitle(e.title)
+            Text(ru, style = MaterialTheme.typography.headlineSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(30f, androidx.compose.ui.unit.TextUnitType.Sp)), color = K.text, maxLines = 1)
+            original?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.muted, maxLines = 1) }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     listOfNotNull(e.episodeLabel, continueMeta(e)).joinToString("  ·  "),

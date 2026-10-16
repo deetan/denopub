@@ -18,7 +18,13 @@ is built around three jobs, in order of how often they come up:
 3. **What's new.** New movies, new serials, and popular titles on kino.pub. *(Personal
    recommendations come later.)*
 
-The player has a tracks panel (press ↓) with one row each for voiceover, subtitles, and quality.
+Long-press any card or episode for actions: mark watched (episode, everything up to here, season,
+whole title), "Начал смотреть", remove from Continue, wishlist add/remove. Every action is written to
+kino.pub immediately, so the official apps and the website see the same state. Continue is split into
+two compact rows: grown-up titles first, then kids' (cartoons) titles. There's also a search screen
+(movies / serials filter) behind the **Поиск** button (↑ from the first row).
+
+The player seeks ±10 s with ← / → (hold to keep seeking). It has a tracks panel (press ↓) with one row each for voiceover, subtitles, and quality.
 Every option is visible at once, so there are no lists to scroll. Your picks are saved per
 serial and applied to the next episode automatically. Playback asks kino.pub for HEVC, 4K, and HDR
 streams, and uses a SurfaceView so HDR10 and Dolby Vision reach the TV.
@@ -129,7 +135,9 @@ app/src/main/java/dev/dt/kinopub/
   data/prefs/LocalPrefs.kt per-title TrackChoice, wishlist "seen" set
   data/Repository.kt       home assembly, resume-point logic, wishlist folder
   ui/Navigation.kt         routes: auth, home, details/{id}, player/{id}?season&episode&start
-  ui/home/                 Continue hero + rows
+  ui/home/                 Continue hero + adult/kids rows, wishlist, new releases
+  ui/search/               search with movie/serial filter
+  ui/common/               cards, long-press ActionMenu
   ui/details/              title page, seasons, episodes
   ui/player/               PlayerController (ExoPlayer + track memory), PlayerScreen (OSD, tracks panel)
   ui/theme/Theme.kt        design tokens (object K)

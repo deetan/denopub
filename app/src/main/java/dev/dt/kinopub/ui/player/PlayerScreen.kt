@@ -49,6 +49,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.FilterChip
+import androidx.tv.material3.FilterChipDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.dt.kinopub.AppContainer
@@ -61,10 +62,10 @@ private enum class Overlay { NONE, OSD, TRACKS }
 
 /**
  * Remote map (overlay hidden):
- *   OK / play-pause  → pause/resume + OSD     ← / →  → −10 s / +30 s
+ *   OK / play-pause  → pause/resume + OSD     ← / → → −10 s / +10 s (hold to keep seeking)
  *   ↓                → tracks panel           ↑      → OSD
  *   audio-track key  → next voiceover         CC key → subtitles on/off
- *   Back             → close overlay, else exit (progress is saved)
+ *   Back             → close tracks panel, else exit (progress is saved)
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -94,7 +95,8 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     }
 
     BackHandler {
-        if (overlay != Overlay.NONE) overlay = Overlay.NONE else onExit()
+        // Only the tracks panel is "modal"; the OSD is informational, so Back exits right away.
+        if (overlay == Overlay.TRACKS) overlay = Overlay.OSD else onExit()
     }
 
     Box(
@@ -220,6 +222,16 @@ private fun TrackRow(
                 FilterChip(
                     selected = o.selected,
                     onClick = { onPick(i, o) },
+                    colors = FilterChipDefaults.colors(
+                        containerColor = Color.Transparent,
+                        contentColor = K.muted,
+                        selectedContainerColor = K.surfaceHi,
+                        selectedContentColor = K.text,
+                        focusedContainerColor = K.accent,
+                        focusedContentColor = K.onAccent,
+                        focusedSelectedContainerColor = K.accent,
+                        focusedSelectedContentColor = K.onAccent,
+                    ),
                     modifier = if (focus != null && i == selectedIndex) Modifier.focusRequester(focus) else Modifier,
                 ) {
                     Text(listOfNotNull(o.label, o.detail).joinToString(" · "), maxLines = 1)

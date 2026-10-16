@@ -54,6 +54,8 @@ data class Item(
     val duration: Duration? = null,
     val finished: Boolean? = null,
     @SerialName("new") val newEpisodes: Int? = null,
+    @SerialName("in_watchlist") val inWatchlist: Boolean? = null, // serials: "Я смотрю"
+    val subscribed: Boolean? = null,
     val videos: List<Video> = emptyList(),   // movies (and multi-part films)
     val seasons: List<Season> = emptyList(), // serials
     @SerialName("created_at") val createdAt: Long? = null,
@@ -167,6 +169,7 @@ data class WatchingSerial(
     val total: Int = 0,
     val watched: Int = 0,
     @SerialName("new") val newEpisodes: Int = 0,
+    @kotlinx.serialization.Transient val subscribed: Boolean = false, // which list it came from
 )
 
 @Serializable
@@ -260,3 +263,12 @@ data class StreamingType(val id: Int, val code: String? = null, val name: String
 
 @Serializable
 data class StreamingTypesResponse(val items: List<StreamingType> = emptyList())
+
+@Serializable
+data class ItemFoldersResponse(val folders: List<BookmarkFolder> = emptyList())
+
+@Serializable
+data class ToggleWatchlistResponse(val watching: kotlinx.serialization.json.JsonElement? = null)
+
+@Serializable
+data class ToggleWatchedResponse(val watched: Int? = null)

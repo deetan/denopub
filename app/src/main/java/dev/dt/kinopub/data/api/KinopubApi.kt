@@ -78,7 +78,7 @@ class KinopubApi(
 
     /** `subscribed` splits serials into two disjoint lists; we want both. */
     suspend fun watchingSerials(): List<WatchingSerial> =
-        get<WatchingSerialsResponse>("watching/serials", "subscribed" to 1).items +
+        get<WatchingSerialsResponse>("watching/serials", "subscribed" to 1).items.map { it.copy(subscribed = true) } +
             get<WatchingSerialsResponse>("watching/serials", "subscribed" to 0).items
     suspend fun watchingMovies(): List<WatchingMovie> =
         get<WatchingMoviesResponse>("watching/movies").items
@@ -91,9 +91,24 @@ class KinopubApi(
     suspend fun markTime(id: Long, video: Int, timeSec: Int, season: Int? = null) {
         get<Unit>("watching/marktime", "id" to id, "video" to video, "time" to timeSec, "season" to season)
     }
-    /** `status=1` makes it an idempotent "mark watched" instead of a toggle. */
-    suspend fun markWatched(id: Long, video: Int, season: Int? = null) {
-        get<Unit>("watching/toggle", "id" to id, "video" to video, "season" to season, "status" to 1)
+    /**
+     * Idempotent watched/unwatched: `status=1|0` turns the toggle into a set.
+     * [video] null + [season] set = whole season; both null (movies) = every part.
+     */
+    suspend fun setWatched(id: Long, watched: Boolean, season: Int? = null, video: Int? = null) {
+        get<Unit>("watching/toggle", "id" to id, "season" to season, "video" to video, "status" to if (watched) 1 else 0)
+    }
+
+    /** Serials only: kino.pub's "Я смотрю" subscription. Toggles — never retry blindly. */
+    suspend fun toggleWatchlist(id: Long): Boolean {
+        val r = get<ToggleWatchlistResponse>("watching/togglewatchlist", "id" to id)
+        val w = r.watching?.toString()?.trim('"')
+        return w == "true" || w == "1"
+    }
+
+    /** Removes the title from kino.pub history, which also drops it from "continue". */
+    suspend fun clearHistory(itemId: Long) {
+        post<Unit>(url("history/clear-for-item", "id" to itemId), emptyMap())
     }
 
     // ---------- Bookmarks (wishlist lives in a folder) ----------
@@ -104,6 +119,11 @@ class KinopubApi(
         get("bookmarks/$folder", "page" to page)
     suspend fun createBookmarkFolder(title: String): BookmarkFolder? =
         post<BookmarkFolderCreated>(url("bookmarks/create"), mapOf("title" to title)).folder
+    suspend fun itemFolders(item: Long): List<BookmarkFolder> =
+        get<ItemFoldersResponse>("bookmarks/get-item-folders", "item" to item).folders
+    suspend fun removeBookmark(item: Long, folder: Long) {
+        post<Unit>(url("bookmarks/remove-item"), mapOf("item" to "$item", "folder" to "$folder"))
+    }
     suspend fun addBookmark(item: Long, folder: Long) {
         post<Unit>(url("bookmarks/add"), mapOf("item" to "$item", "folder" to "$folder"))
     }

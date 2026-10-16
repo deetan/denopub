@@ -61,10 +61,12 @@ fun PosterCard(
     subtitle: String? = null,
     badge: String? = null,
     width: Dp = 150.dp,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Column(modifier.width(width)) {
         Card(
             onClick = onClick,
+            onLongClick = onLongClick,
             shape = CardDefaults.shape(cardShape),
             border = focusBorder(),
             scale = CardDefaults.scale(focusedScale = 1.06f),
@@ -119,13 +121,13 @@ fun ContinueCard(
                 ),
             )
             newBadge?.let { Badge(it, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) }
-            Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
+            Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 10.dp, vertical = 8.dp)) {
                 Text(
                     title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium, color = K.text,
+                    style = MaterialTheme.typography.bodyMedium, color = K.text,
                 )
                 Text(
-                    listOfNotNull(episodeLabel, meta).joinToString("  ·  "),
+                    listOfNotNull(episodeLabel, meta).joinToString(" · "),
                     style = MaterialTheme.typography.labelMedium, color = K.muted,
                 )
             }
@@ -144,4 +146,10 @@ fun ProgressLine(progress: Float, modifier: Modifier = Modifier, height: Dp = 4.
 fun formatMinutes(sec: Int): String {
     val m = sec / 60
     return if (m >= 60) "${m / 60} ч ${m % 60} мин" else "$m мин"
+}
+
+/** kino.pub titles are "Русское / Original". Returns (russian, original or null). */
+fun splitTitle(title: String): Pair<String, String?> {
+    val i = title.indexOf(" / ")
+    return if (i < 0) title to null else title.substring(0, i) to title.substring(i + 3).takeIf { it.isNotBlank() }
 }

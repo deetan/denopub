@@ -18,12 +18,14 @@ import dev.dt.kinopub.ui.auth.AuthScreen
 import dev.dt.kinopub.ui.details.DetailsScreen
 import dev.dt.kinopub.ui.home.HomeScreen
 import dev.dt.kinopub.ui.player.PlayerScreen
+import dev.dt.kinopub.ui.search.SearchScreen
 import dev.dt.kinopub.ui.theme.K
 
 object Routes {
     const val AUTH = "auth"
     const val HOME = "home"
     const val DETAILS = "details/{id}"
+    const val SEARCH = "search"
     const val PLAYER = "player/{id}?season={season}&episode={episode}&start={start}"
 
     fun details(id: Long) = "details/$id"
@@ -49,7 +51,11 @@ fun KinoNavHost(c: AppContainer) {
                     c,
                     onPlay = { nav.navigate(Routes.player(it)) },
                     onOpen = { nav.navigate(Routes.details(it)) },
+                    onSearch = { nav.navigate(Routes.SEARCH) },
                 )
+            }
+            composable(Routes.SEARCH) {
+                SearchScreen(c, onOpen = { nav.navigate(Routes.details(it)) })
             }
             composable(Routes.DETAILS, listOf(navArgument("id") { type = NavType.LongType })) { e ->
                 DetailsScreen(

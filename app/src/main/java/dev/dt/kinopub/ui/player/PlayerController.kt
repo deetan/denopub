@@ -70,7 +70,7 @@ class PlayerController(
         )
         .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(c.http)))
         .setSeekBackIncrementMs(10_000)
-        .setSeekForwardIncrementMs(30_000)
+        .setSeekForwardIncrementMs(10_000)
         .build()
 
     private val _ui = MutableStateFlow(PlayerUi())
@@ -178,13 +178,15 @@ class PlayerController(
     fun playNext() {
         val it = item ?: return
         val next = c.repository.nextOf(it, current.season, current.episode) ?: return
-        viewModelScope.launch { c.repository.markWatched(it.id, current.season, current.episode) }
+        val done = current
+        c.appScope.launch { c.repository.markWatched(it.id, done.season, done.episode) }
         load(ResumeTarget(it.id, next.first, next.second, 0), 0)
     }
 
     private fun onEnded() {
         val it = item ?: return
-        viewModelScope.launch { c.repository.markWatched(it.id, current.season, current.episode) }
+        val done = current
+        c.appScope.launch { c.repository.markWatched(it.id, done.season, done.episode) }
         if (c.repository.nextOf(it, current.season, current.episode) != null) playNext()
     }
 
@@ -193,7 +195,8 @@ class PlayerController(
         val sec = (player.currentPosition / 1000).toInt()
         if (sec < 5) return
         val t = current
-        viewModelScope.launch { c.repository.markTime(it.id, t.season, t.episode, sec) }
+        // appScope, not viewModelScope: this also runs from onCleared, when viewModelScope is dead.
+        c.appScope.launch { c.repository.markTime(it.id, t.season, t.episode, sec) }
     }
 
     // ---------- tracks ----------
@@ -204,10 +207,27 @@ class PlayerController(
             (0 until g.length).filter { g.isTrackSupported(it) }.map { i -> Triple(g, i, g.getTrackFormat(i)) }
         }
 
-    private fun textTracks(): List<Triple<Tracks.Group, Int, Format>> =
-        player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }.flatMap { g ->
+    /**
+     * Subtitles, most useful first: the remembered language, then Russian, then English, then the
+     * rest alphabetically. kino.pub manifests often carry 20+ languages.
+     */
+    private fun textTracks(): List<Triple<Tracks.Group, Int, Format>> {
+        val all = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }.flatMap { g ->
             (0 until g.length).map { i -> Triple(g, i, g.getTrackFormat(i)) }
         }
+        val remembered = choice.subtitleLang?.let { subtitleName(it) }
+        fun rank(f: Format): Int {
+            val name = subtitleName(f.label ?: f.language.orEmpty())
+            val lang = f.language.orEmpty().lowercase()
+            return when {
+                remembered != null && name == remembered -> 0
+                lang.startsWith("ru") -> 1
+                lang.startsWith("en") -> 2
+                else -> 3
+            }
+        }
+        return all.sortedWith(compareBy({ rank(it.third) }, { subtitleName(it.third.label ?: it.third.language.orEmpty()) }))
+    }
 
     private fun meta(i: Int): AudioTrack? = video?.audios?.sortedBy { it.index }?.getOrNull(i)
 
@@ -231,7 +251,7 @@ class PlayerController(
         val subsOn = text.any { (g, t, _) -> g.isTrackSelected(t) }
         val subs = listOf(TrackOption("s-off", "Выкл", null, selected = !subsOn)) +
             text.mapIndexed { i, (g, t, f) ->
-                TrackOption("s$i", f.label ?: f.language?.uppercase() ?: "Субтитры ${i + 1}", null, g.isTrackSelected(t))
+                TrackOption("s$i", subtitleName(f.label ?: f.language ?: "Субтитры ${i + 1}"), null, g.isTrackSelected(t))
             }
         _ui.value = _ui.value.copy(audio = audio, subtitles = subs)
     }
@@ -258,7 +278,7 @@ class PlayerController(
                 .setOverrideForType(TrackSelectionOverride(picked.first.mediaTrackGroup, picked.second))
         }
         player.trackSelectionParameters = b.build()
-        if (remember) saveChoice(choice.copy(subtitleLang = picked?.third?.let { it.label ?: it.language }))
+        if (remember) saveChoice(choice.copy(subtitleLang = picked?.third?.let { subtitleName(it.label ?: it.language.orEmpty()) }))
     }
 
     fun selectQuality(height: Int) {
@@ -310,7 +330,7 @@ class PlayerController(
     private fun bestSubtitleIndex(want: String?): Int? {
         if (want == null) return null
         val text = textTracks()
-        return text.indexOfFirst { (_, _, f) -> f.label == want }.takeIf { it >= 0 }
+        return text.indexOfFirst { (_, _, f) -> subtitleName(f.label ?: "") == subtitleName(want) }.takeIf { it >= 0 }
             ?: text.indexOfFirst { (_, _, f) -> f.language.equals(want, ignoreCase = true) }.takeIf { it >= 0 }
     }
 
@@ -337,6 +357,9 @@ class PlayerController(
             url.contains(".ass", true) || url.contains(".ssa", true) -> MimeTypes.TEXT_SSA
             else -> MimeTypes.APPLICATION_SUBRIP
         }
+
+        /** Manifest names look like "ENG #12"; the number is noise. */
+        fun subtitleName(raw: String): String = raw.replace(Regex("\\s*#\\d+$"), "").trim().uppercase()
 
         fun subtitleLabel(lang: String, forced: Boolean) = lang.uppercase() + if (forced) " (forced)" else ""
 

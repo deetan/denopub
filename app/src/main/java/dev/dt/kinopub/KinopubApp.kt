@@ -31,6 +31,8 @@ class KinopubApp : Application(), SingletonImageLoader.Factory {
 }
 
 class AppContainer(app: Application) {
+    /** For writes that must survive the screen that started them (progress on exit). */
+    val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
     val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)

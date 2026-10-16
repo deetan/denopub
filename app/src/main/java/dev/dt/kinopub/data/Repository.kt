@@ -26,6 +26,7 @@ data class ContinueEntry(
     val durationSec: Int,
     val newEpisodes: Int,
     val remainingEpisodes: Int,
+    val isKids: Boolean = false,
 ) {
     /** "S2·E5" for serials, null for movies. */
     val episodeLabel: String? get() = target.season?.let { "S$it·E${target.episode}" }
@@ -35,13 +36,24 @@ data class ContinueEntry(
 data class WishlistEntry(val item: Item, val isNew: Boolean)
 
 data class HomeData(
-    val continueWatching: List<ContinueEntry>,
+    val continueWatching: List<ContinueEntry>,   // all, most recent first
     val wishlist: List<WishlistEntry>,
     val freshMovies: List<Item>,
     val freshSerials: List<Item>,
     val hot: List<Item>,
 ) {
     val newInWishlist: Int get() = wishlist.count { it.isNew }
+    val continueAdult: List<ContinueEntry> get() = continueWatching.filterNot { it.isKids }
+    val continueKids: List<ContinueEntry> get() = continueWatching.filter { it.isKids }
+}
+
+/**
+ * Kids row rule: animation and children's genres. "Семейный" alone is not enough — plenty of
+ * family films are grown-up viewing — and "Аниме" is mostly not for kids.
+ */
+fun isKidsContent(item: Item): Boolean = item.genres.any { g ->
+    val t = g.title.orEmpty().lowercase()
+    t.startsWith("мульт") || t.startsWith("детск")
 }
 
 class Repository(
@@ -72,8 +84,8 @@ class Repository(
         val newCounts = serials.await().associate { it.id to it.newEpisodes }
         val ordered = LinkedHashMap<Long, Item>()
         history.await().forEach { ordered.putIfAbsent(it.item.id, it.item) }
-        // In-progress titles missing from the first history page still belong on the row.
-        serials.await().forEach { s ->
+        // Subscribed serials ("Я смотрю") belong on the row even without recent history.
+        serials.await().filter { it.subscribed }.forEach { s ->
             ordered.putIfAbsent(s.id, Item(id = s.id, title = s.title, type = s.type, posters = s.posters))
         }
         movies.await().forEach { m ->
@@ -83,12 +95,19 @@ class Repository(
         ordered.values.take(limit * 2).map { item ->
             async {
                 runCatching {
+                    val kids = async { isKids(item.id) }
                     val info = api.watching(item.id)
-                    resumeEntry(item, info, newCounts[item.id] ?: 0)
+                    resumeEntry(item, info, newCounts[item.id] ?: 0)?.copy(isKids = kids.await())
                 }.getOrNull()
             }
         }.awaitAll().filterNotNull().take(limit)
     }
+
+    private val kidsCache = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+
+    /** Genres never change, so one /items call per title per process is enough. */
+    private suspend fun isKids(id: Long): Boolean =
+        kidsCache[id] ?: runCatching { isKidsContent(api.item(id)) }.getOrDefault(false).also { kidsCache[id] = it }
 
     private fun resumeEntry(item: Item, info: WatchingInfo, newEpisodes: Int): ContinueEntry? {
         val poster = item.posters?.wide ?: item.posters?.big ?: item.posters?.medium
@@ -97,18 +116,19 @@ class Repository(
                 s.episodes.sortedBy { it.number }.map { s.number to it }
             }
             // First episode after the last one touched that is not finished.
-            val lastTouched = flat.indexOfLast { (_, e) -> e.status >= 0 || e.time > 0 }
+            // marktime stores time without touching status: "in progress" = time > 0, status != 1.
+            val lastTouched = flat.indexOfLast { (_, e) -> e.status == 1 || e.time > 0 }
             val next = flat.drop(maxOf(lastTouched, 0)).firstOrNull { (_, e) -> e.status != 1 }
                 ?: return null // fully watched, nothing new
             val (season, ep) = next
             val remaining = flat.count { (_, e) -> e.status != 1 }
             return ContinueEntry(
                 item.id, item.title, poster, isSerial = true,
-                target = ResumeTarget(item.id, season, ep.number, if (ep.status == 0) ep.time else 0),
+                target = ResumeTarget(item.id, season, ep.number, ep.time),
                 durationSec = ep.duration, newEpisodes = newEpisodes, remainingEpisodes = remaining,
             )
         }
-        val part = info.videos.firstOrNull { it.status == 0 } ?: return null
+        val part = info.videos.firstOrNull { it.status != 1 && (it.status == 0 || it.time > 0) } ?: return null
         return ContinueEntry(
             item.id, item.title, poster, isSerial = false,
             target = ResumeTarget(item.id, null, part.number, part.time),
@@ -162,7 +182,64 @@ class Repository(
         runCatching { api.markTime(itemId, episode, timeSec, season) }
 
     suspend fun markWatched(itemId: Long, season: Int?, episode: Int) =
-        runCatching { api.markWatched(itemId, episode, season) }
+        runCatching { api.setWatched(itemId, true, season, episode) }
+
+    // ---------- User actions (all written to kino.pub) ----------
+
+    /** One episode (serial) or one part (movie). */
+    suspend fun setEpisodeWatched(itemId: Long, season: Int?, episode: Int, watched: Boolean) =
+        api.setWatched(itemId, watched, season, episode)
+
+    suspend fun setSeasonWatched(itemId: Long, season: Int, watched: Boolean) =
+        api.setWatched(itemId, watched, season, null)
+
+    /** Whole title: every season of a serial, every part of a movie. */
+    suspend fun setItemWatched(item: Item, watched: Boolean) {
+        if (item.seasons.isNotEmpty()) item.seasons.forEach { api.setWatched(item.id, watched, it.number, null) }
+        else item.videos.forEach { api.setWatched(item.id, watched, null, it.number) }
+    }
+
+    suspend fun isInWishlist(itemId: Long): Boolean =
+        api.itemFolders(itemId).any { it.id == wishlistFolder() }
+
+    /** Returns the new state. */
+    suspend fun setWishlisted(itemId: Long, on: Boolean): Boolean {
+        val folder = wishlistFolder()
+        if (on) api.addBookmark(itemId, folder) else api.removeBookmark(itemId, folder)
+        return on
+    }
+
+    /**
+     * "Начал смотреть": serials → kino.pub "Я смотрю" subscription (shows up in Continue);
+     * movies → a 1-second progress mark, which puts the movie into watching/movies.
+     */
+    suspend fun setWatching(item: Item, on: Boolean): Boolean {
+        if (item.isSerial) {
+            val now = item.inWatchlist == true
+            return if (now != on) api.toggleWatchlist(item.id) else now
+        }
+        val part = item.videos.firstOrNull()?.number ?: 1
+        if (on) api.markTime(item.id, part, 1) else api.clearHistory(item.id)
+        return on
+    }
+
+    /** Drop from Continue on kino.pub: clear history and unsubscribe a serial. */
+    suspend fun removeFromContinue(itemId: Long) {
+        api.clearHistory(itemId)
+        runCatching {
+            val item = api.item(itemId)
+            if (item.isSerial && item.inWatchlist == true) api.toggleWatchlist(itemId)
+        }
+    }
+
+    suspend fun search(query: String, type: String?): List<Item> =
+        api.search(query).items.filter { type == null || matchesType(it, type) }
+
+    private fun matchesType(item: Item, type: String) = when (type) {
+        "serial" -> item.type in Item.SERIAL_TYPES
+        "movie" -> item.type !in Item.SERIAL_TYPES
+        else -> true
+    }
 
     companion object {
         const val WISHLIST_TITLE = "Wishlist"
