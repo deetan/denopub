@@ -46,6 +46,23 @@ class LocalPrefs(private val context: Context) {
         }
     }
 
+    private val kKids = stringSetPreferencesKey("kids_ids")
+    private val kAdult = stringSetPreferencesKey("adult_ids")
+
+    /** Persistent kids/adult classification by item id (genres never change). null = unknown. */
+    suspend fun kidsFlags(): Map<Long, Boolean> {
+        val p = context.localStore.data.first()
+        return p[kKids].orEmpty().mapNotNull { it.toLongOrNull() }.associateWith { true } +
+            p[kAdult].orEmpty().mapNotNull { it.toLongOrNull() }.associateWith { false }
+    }
+
+    suspend fun saveKidsFlags(flags: Map<Long, Boolean>) {
+        context.localStore.edit { p ->
+            p[kKids] = p[kKids].orEmpty() + flags.filterValues { it }.keys.map { it.toString() }
+            p[kAdult] = p[kAdult].orEmpty() + flags.filterValues { !it }.keys.map { it.toString() }
+        }
+    }
+
     suspend fun seenWishlistIds(): Set<Long> =
         context.localStore.data.first()[kSeenWishlist].orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 

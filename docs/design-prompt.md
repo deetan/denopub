@@ -1,4 +1,4 @@
-# Design prompt: Kino TV (for Claude Design / any UI design tool)
+# Design prompt: denopub (for Claude Design / any UI design tool)
 
 Paste the block below as-is. The wireframes it describes are already implemented in code
 (`app/src/main/java/dev/dt/kinopub/ui/`), so this prompt asks for **visual polish within a fixed

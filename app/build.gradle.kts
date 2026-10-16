@@ -19,8 +19,15 @@ android {
 
     buildTypes {
         debug {
-            // Personal app: the debug build IS the build we run on the TV.
             isMinifyEnabled = false
+        }
+        // What runs on the TV: R8-optimized (debug Compose is several times slower on a
+        // Chromecast), signed with the debug key because it is only ever sideloaded.
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -42,6 +49,7 @@ kotlin {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.viewmodel)

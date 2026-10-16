@@ -1,6 +1,6 @@
-# Kino TV
+# denopub
 
-A personal Android TV client for kino.pub, built to resume what you're watching in one click.
+**denopub** — a personal Android TV client for kino.pub, built to resume what you're watching in one click.
 
 `status: active, early (v0.1)` · `Kotlin · Jetpack Compose for TV · Media3 ExoPlayer` · `runs on: Chromecast with Google TV (sideloaded, local only)`
 
@@ -83,7 +83,7 @@ sdk.dir=/opt/homebrew/share/android-commandlinetools
 Build:
 
 ```bash
-JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./gradlew :app:assembleDebug
+JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./gradlew :app:assembleRelease
 ```
 
 ### Put it on the TV (Wi-Fi)
@@ -111,7 +111,8 @@ From then on, each change is one command:
 scripts/tv.sh deploy
 ```
 
-This builds, installs over Wi-Fi, and launches. `scripts/tv.sh logs` streams logcat, and
+This builds the optimized release APK (R8, signed with the debug key), installs it over Wi-Fi, and
+launches it. `scripts/tv.sh logs` streams logcat, and
 `scripts/tv.sh shot` saves a screenshot of the TV.
 
 ## Configuration
@@ -143,6 +144,7 @@ app/src/main/java/dev/dt/kinopub/
   ui/theme/Theme.kt        design tokens (object K)
 docs/kinopub-api.md        kino.pub API reference (verified vs UNVERIFIED notes)
 docs/design-prompt.md      UI spec / prompt for visual design
+docs/brand-prompts.md      image prompts for icon, TV banner, splash mark
 scripts/tv.sh              Wi-Fi deploy helper
 ```
 

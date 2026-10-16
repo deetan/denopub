@@ -1,4 +1,4 @@
-# CLAUDE.md — Kino TV
+# CLAUDE.md — denopub
 
 ## Response language
 
@@ -36,6 +36,9 @@ optimized for "resume what I'm watching in one click". Read in order:
   wishlist seen-set): watched/unwatched = `watching/toggle?status=1|0` (episode, season, or every
   season), "Начал смотреть" = `togglewatchlist` for serials / 1-second `marktime` for movies,
   "Убрать из «Продолжить»" = `history/clear-for-item` + unsubscribe, wishlist = bookmarks add/remove.
+- Kids/adult flags are cached persistently (`LocalPrefs.kidsFlags`); Home renders from the cache
+  and `HomeViewModel.classifyNewTitles()` fetches genres only for unseen titles afterwards
+  (calling `/items` for ~30 titles inline made first launch >10 s).
   Continue = history ∪ *subscribed* serials ∪ unfinished movies, so removal sticks.
 - **Long-press menus** (`ui/common/ActionMenu.kt`) on every card and episode row.
 - **Focus is the UI.** Every screen requests initial focus on its primary action (first Continue
@@ -43,7 +46,10 @@ optimized for "resume what I'm watching in one click". Read in order:
 
 ## How to develop here
 
-- Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./gradlew :app:assembleDebug`
+- Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./gradlew :app:assembleRelease` — the **release**
+  build (R8, signed with the debug key, ~5 MB) is what runs on the TV; debug Compose is far slower
+  (170 skipped frames at startup on the emulator). Debug and release share the signing key, so they
+  install over each other and keep the login.
 - Run on TV: `scripts/tv.sh deploy` (needs `scripts/tv.sh connect <ip>` once). Logs: `scripts/tv.sh logs`.
 - Emulator: AVD `kino_tv` (system-images;android-34;android-tv;arm64-v8a, 1920×1080). Start with
   `$ANDROID_HOME/emulator/emulator -avd kino_tv -no-snapshot-save`, then `adb install -r
@@ -52,10 +58,18 @@ optimized for "resume what I'm watching in one click". Read in order:
   keys), method in `KinopubApi`, use from `Repository`. Update `docs/kinopub-api.md` if you
   verified something marked UNVERIFIED.
 
+- App name is **denopub** (label, device name in the kino.pub cabinet). Package/applicationId stay
+  `dev.dt.kinopub` — changing it would install a second app and lose the login.
+- Splash: `ui/SplashOverlay.kt` (Compose) shows the mark until `AppContainer.uiReady` (Home data or
+  login code), max 5 s. The system splash (`Theme.Kinopub.Splash`) only bridges process start —
+  the Android TV image doesn't draw its icon, so never hold it with `setKeepOnScreenCondition`.
+- Brand art is a placeholder; prompts for the real one are in `docs/brand-prompts.md`.
+
 ## Conventions
 
 - Manual DI via `AppContainer`; no Hilt. Hand-written OkHttp client; no Retrofit.
 - Design tokens live in `ui/theme/Theme.kt` (`object K`); don't hardcode colors in screens.
+- Russian counts go through `plural(n, one, few, many)` (`ui/common/Cards.kt`) — "4 серии", not "4 серий".
 - Russian UI strings inline for now (single-user app); move to `strings.xml` if it grows.
 
 ## Gotchas & known issues

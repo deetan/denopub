@@ -92,22 +92,32 @@ class Repository(
             ordered.putIfAbsent(m.id, Item(id = m.id, title = m.title, type = m.type, posters = m.posters))
         }
 
+        // Kids/adult comes from a persistent cache only, so Home never waits on /items calls;
+        // unknown titles are classified afterwards by classifyKids().
+        val kids = prefs.kidsFlags()
         ordered.values.take(limit * 2).map { item ->
             async {
                 runCatching {
-                    val kids = async { isKids(item.id) }
                     val info = api.watching(item.id)
-                    resumeEntry(item, info, newCounts[item.id] ?: 0)?.copy(isKids = kids.await())
+                    resumeEntry(item, info, newCounts[item.id] ?: 0)?.copy(isKids = kids[item.id] == true)
                 }.getOrNull()
             }
         }.awaitAll().filterNotNull().take(limit)
     }
 
-    private val kidsCache = java.util.concurrent.ConcurrentHashMap<Long, Boolean>()
+    /** Titles in [entries] not yet classified as kids/adult. */
+    suspend fun unclassified(entries: List<ContinueEntry>): List<Long> {
+        val known = prefs.kidsFlags().keys
+        return entries.map { it.itemId }.filter { it !in known }
+    }
 
-    /** Genres never change, so one /items call per title per process is enough. */
-    private suspend fun isKids(id: Long): Boolean =
-        kidsCache[id] ?: runCatching { isKidsContent(api.item(id)) }.getOrDefault(false).also { kidsCache[id] = it }
+    /** Fetches genres for [ids] and stores the verdict; returns ids that turned out to be kids'. */
+    suspend fun classifyKids(ids: List<Long>): Set<Long> = coroutineScope {
+        val flags = ids.map { id -> async { id to runCatching { isKidsContent(api.item(id)) }.getOrNull() } }
+            .awaitAll().mapNotNull { (id, k) -> k?.let { id to it } }.toMap()
+        prefs.saveKidsFlags(flags)
+        flags.filterValues { it }.keys
+    }
 
     private fun resumeEntry(item: Item, info: WatchingInfo, newEpisodes: Int): ContinueEntry? {
         val poster = item.posters?.wide ?: item.posters?.big ?: item.posters?.medium

@@ -12,9 +12,9 @@ class DeviceRegistration(private val api: KinopubApi) {
     suspend fun afterLogin() {
         runCatching {
             api.notifyDevice(
-                title = "Kino TV (${Build.MODEL})",
+                title = "denopub (${Build.MODEL})",
                 hardware = "${Build.MANUFACTURER} ${Build.MODEL}",
-                software = "Android ${Build.VERSION.RELEASE} / kino ${BuildConfig.VERSION_NAME}",
+                software = "Android ${Build.VERSION.RELEASE} / denopub ${BuildConfig.VERSION_NAME}",
             )
         }
         runCatching {

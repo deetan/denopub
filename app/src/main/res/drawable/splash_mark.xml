@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash icon: amber rounded square with a play triangle. 288×288 canvas; content stays
+     inside the 192dp circle Android 12+ keeps visible. Placeholder until the real mark (docs/brand-prompts.md). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp" android:height="288dp"
+    android:viewportWidth="288" android:viewportHeight="288">
+    <path android:fillColor="#F2B33D"
+        android:pathData="M120,84 L168,84 A36,36 0 0 1 204,120 L204,168 A36,36 0 0 1 168,204 L120,204 A36,36 0 0 1 84,168 L84,120 A36,36 0 0 1 120,84 Z" />
+    <path android:fillColor="#0E0F12"
+        android:pathData="M127,113 L127,175 L177,144 Z" />
+</vector>

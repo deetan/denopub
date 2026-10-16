@@ -45,4 +45,7 @@ class AppContainer(app: Application) {
     val prefs = LocalPrefs(app)
     val repository = Repository(api, prefs)
     val registration = DeviceRegistration(api)
+
+    /** Splash stays up until the first real screen has content (Home data or the login code). */
+    val uiReady = kotlinx.coroutines.flow.MutableStateFlow(false)
 }

@@ -153,3 +153,15 @@ fun splitTitle(title: String): Pair<String, String?> {
     val i = title.indexOf(" / ")
     return if (i < 0) title to null else title.substring(0, i) to title.substring(i + 3).takeIf { it.isNotBlank() }
 }
+
+/** Russian plural: plural(4, "серия", "серии", "серий") → "серии". */
+fun plural(n: Int, one: String, few: String, many: String): String {
+    val m100 = n % 100
+    val m10 = n % 10
+    return when {
+        m100 in 11..14 -> many
+        m10 == 1 -> one
+        m10 in 2..4 -> few
+        else -> many
+    }
+}

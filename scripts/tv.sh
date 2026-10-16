@@ -3,7 +3,7 @@
 #
 #   scripts/tv.sh pair <ip:port> <code>  one-time: Android 11+ "Wireless debugging" pairing
 #   scripts/tv.sh connect [ip[:port]]    connect (remembers the address in .tv-address)
-#   scripts/tv.sh deploy                 build debug APK, install, launch  (default)
+#   scripts/tv.sh deploy                 build release APK (R8), install, launch  (default)
 #   scripts/tv.sh run                    launch without rebuilding
 #   scripts/tv.sh logs                   app logcat
 #   scripts/tv.sh shot [file.png]        screenshot of the TV
@@ -37,7 +37,7 @@ case $cmd in
     adb connect "$a" ;;
   deploy)
     ensure_connected
-    ./gradlew --quiet :app:installDebug
+    ./gradlew --quiet :app:installRelease
     adb shell am start -n "$PKG/.MainActivity" >/dev/null
     echo "Installed and launched on $ANDROID_SERIAL" ;;
   run)     ensure_connected; adb shell am start -n "$PKG/.MainActivity" ;;

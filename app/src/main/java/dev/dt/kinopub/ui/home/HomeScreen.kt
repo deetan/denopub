@@ -12,7 +12,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import dev.dt.kinopub.ui.common.splitTitle
+import dev.dt.kinopub.ui.common.plural
 import dev.dt.kinopub.ui.common.ActionMenu
 import dev.dt.kinopub.ui.common.MenuAction
 import androidx.compose.ui.input.key.Key
@@ -108,6 +112,10 @@ fun HomeScreen(
         )
     }
 
+    LaunchedEffect(data != null, state.error) {
+        if (data != null || state.error != null) c.uiReady.value = true
+    }
+
     if (data == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
@@ -118,7 +126,7 @@ fun HomeScreen(
         return
     }
 
-    val continueRow = rememberLazyListState()
+    val continueRow = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val column = rememberLazyListState()
     LaunchedEffect(state.loading) {
         // Wait for the fresh load (order changes after every playback), then put focus on the
@@ -150,34 +158,50 @@ fun HomeScreen(
             var focused by remember { mutableStateOf(data.continueWatching.first()) }
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 ContinueHero(focused)
-                val rows = listOf("" to data.continueAdult, "Детям" to data.continueKids).filter { it.second.isNotEmpty() }
-                rows.forEachIndexed { r, (label, entries) ->
-                    if (label.isNotEmpty()) {
-                        Text(
-                            label, style = MaterialTheme.typography.titleMedium, color = K.text,
-                            modifier = Modifier.padding(horizontal = K.screenPadH),
-                        )
+                @Composable
+                fun card(e: ContinueEntry, first: Boolean) = ContinueCard(
+                    title = splitTitle(e.title).first,
+                    image = e.poster,
+                    episodeLabel = e.episodeLabel,
+                    meta = continueMeta(e),
+                    progress = e.progress,
+                    newBadge = e.newEpisodes.takeIf { it > 0 }?.let { "+$it" },
+                    onClick = { onPlay(e.target) },
+                    onLongClick = { continueMenu(e) },
+                    width = 200.dp,
+                    modifier = Modifier
+                        .onFocusChanged { if (it.isFocused) focused = e }
+                        .then(if (first) Modifier.focusRequester(firstFocus) else Modifier),
+                )
+
+                // Grown-up titles: two rows that scroll together (↑/↓ moves between them),
+                // most recent top-left, so ~10 titles are visible without scrolling.
+                val adult = data.continueAdult
+                if (adult.isNotEmpty()) {
+                    val rows = if (adult.size > 4) 2 else 1
+                    LazyHorizontalGrid(
+                        rows = GridCells.Fixed(rows),
+                        state = continueRow,
+                        contentPadding = PaddingValues(horizontal = K.screenPadH, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(K.cardGap),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(if (rows == 2) 252.dp else 126.dp),
+                    ) {
+                        gridItemsIndexed(adult, key = { _, e -> e.itemId }) { i, e -> card(e, first = i == 0) }
                     }
+                }
+                // Kids' titles get their own row, so a child finds cartoons without the rest.
+                if (data.continueKids.isNotEmpty()) {
+                    Text(
+                        "Детям", style = MaterialTheme.typography.titleMedium, color = K.text,
+                        modifier = Modifier.padding(horizontal = K.screenPadH),
+                    )
                     LazyRow(
-                        state = if (r == 0) continueRow else rememberLazyListState(),
                         contentPadding = PaddingValues(horizontal = K.screenPadH),
                         horizontalArrangement = Arrangement.spacedBy(K.cardGap),
                     ) {
-                        itemsIndexed(entries, key = { _, e -> e.itemId }) { i, e ->
-                            ContinueCard(
-                                title = splitTitle(e.title).first,
-                                image = e.poster,
-                                episodeLabel = e.episodeLabel,
-                                meta = continueMeta(e),
-                                progress = e.progress,
-                                newBadge = e.newEpisodes.takeIf { it > 0 }?.let { "+$it" },
-                                onClick = { onPlay(e.target) },
-                                onLongClick = { continueMenu(e) },
-                                width = 200.dp,
-                                modifier = Modifier
-                                    .onFocusChanged { if (it.isFocused) focused = e }
-                                    .then(if (r == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),
-                            )
+                        itemsIndexed(data.continueKids, key = { _, e -> e.itemId }) { i, e ->
+                            card(e, first = adult.isEmpty() && i == 0)
                         }
                     }
                 }
@@ -185,7 +209,7 @@ fun HomeScreen(
         }
 
         if (data.wishlist.isNotEmpty()) item("wishlist") {
-            Section("Вишлист", badge = data.newInWishlist.takeIf { it > 0 }?.let { "$it новых" }) {
+            Section("Вишлист", badge = data.newInWishlist.takeIf { it > 0 }?.let { "$it ${plural(it, "новое", "новых", "новых")}" }) {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = K.screenPadH),
                     horizontalArrangement = Arrangement.spacedBy(K.cardGap),
@@ -305,10 +329,10 @@ private fun ContinueHero(e: ContinueEntry) {
                     listOfNotNull(e.episodeLabel, continueMeta(e)).joinToString("  ·  "),
                     style = MaterialTheme.typography.titleMedium, color = K.text,
                 )
-                if (e.newEpisodes > 0) Badge("+${e.newEpisodes} новых")
+                if (e.newEpisodes > 0) Badge("+${e.newEpisodes} ${plural(e.newEpisodes, "новая", "новые", "новых")}")
             }
             if (e.isSerial && e.remainingEpisodes > 1) {
-                Text("ещё ${e.remainingEpisodes} серий впереди", style = MaterialTheme.typography.bodyMedium, color = K.muted)
+                Text("ещё ${e.remainingEpisodes} ${plural(e.remainingEpisodes, "серия", "серии", "серий")} впереди", style = MaterialTheme.typography.bodyMedium, color = K.muted)
             }
             ProgressLine(e.progress, Modifier.width(320.dp))
         }

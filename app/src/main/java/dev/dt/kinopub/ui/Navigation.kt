@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
@@ -38,9 +39,10 @@ fun KinoNavHost(c: AppContainer) {
     val nav = rememberNavController()
     // Decide the start screen once, after DataStore has loaded.
     val loggedIn by produceState<Boolean?>(null) { value = c.tokens.current() != null }
+    val ready by c.uiReady.collectAsState()
     Box(Modifier.fillMaxSize().background(K.bg)) {
-        val start = loggedIn ?: return@Box
-        NavHost(nav, startDestination = if (start) Routes.HOME else Routes.AUTH) {
+        val start = loggedIn
+        if (start != null) NavHost(nav, startDestination = if (start) Routes.HOME else Routes.AUTH) {
             composable(Routes.AUTH) {
                 AuthScreen(c) {
                     nav.navigate(Routes.HOME) { popUpTo(Routes.AUTH) { inclusive = true } }
@@ -86,5 +88,6 @@ fun KinoNavHost(c: AppContainer) {
                 )
             }
         }
+        SplashOverlay(ready)
     }
 }

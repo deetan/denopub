@@ -34,6 +34,7 @@ fun AuthScreen(c: AppContainer, onDone: () -> Unit) {
             try {
                 val dc = c.api.requestDeviceCode()
                 userCode = dc.userCode
+                c.uiReady.value = true
                 uri = dc.verificationUri.removePrefix("https://").removePrefix("http://")
                 error = null
                 val deadline = System.currentTimeMillis() + dc.expiresIn * 1000L
@@ -48,6 +49,7 @@ fun AuthScreen(c: AppContainer, onDone: () -> Unit) {
                 // Code expired: loop and fetch a fresh one.
             } catch (e: Exception) {
                 error = e.message
+                c.uiReady.value = true
                 delay(5_000)
             }
         }

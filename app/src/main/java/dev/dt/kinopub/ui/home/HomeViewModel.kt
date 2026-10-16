@@ -28,7 +28,21 @@ class HomeViewModel(private val repo: Repository) : ViewModel() {
                 { HomeState(it, loading = false) },
                 { _state.value.copy(loading = false, error = it.message) },
             )
+            classifyNewTitles()
         }
+    }
+
+    /** First sighting of a title: look up its genres once, then move kids' titles to their row. */
+    private suspend fun classifyNewTitles() {
+        val d = _state.value.data ?: return
+        val unknown = runCatching { repo.unclassified(d.continueWatching) }.getOrDefault(emptyList())
+        if (unknown.isEmpty()) return
+        val kids = runCatching { repo.classifyKids(unknown) }.getOrDefault(emptySet())
+        if (kids.isEmpty()) return
+        val cur = _state.value.data ?: return
+        _state.value = _state.value.copy(
+            data = cur.copy(continueWatching = cur.continueWatching.map { if (it.itemId in kids) it.copy(isKids = true) else it }),
+        )
     }
 
     // ---------- actions: write to kino.pub, confirm, reload ----------
