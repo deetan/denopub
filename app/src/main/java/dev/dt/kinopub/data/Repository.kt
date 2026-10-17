@@ -100,6 +100,21 @@ class Repository(
 
         val newCounts = serials.await().associate { it.id to it.newEpisodes }
         val ordered = LinkedHashMap<Long, Item>()
+        // Just started via "Начал смотреть" and newer than the last history entry: lead the row.
+        // (Without this a fresh subscription sat after ~100 history titles and was cut off.)
+        val lastSeenMs = (history.await().maxOfOrNull { it.lastSeen } ?: 0L) * 1000
+        val started = prefs.startedAt().filter { (_, ts) -> System.currentTimeMillis() - ts < 14L * 24 * 3600 * 1000 }
+        val allById = (serials.await().map { Item(id = it.id, title = it.title, type = it.type, posters = it.posters) } +
+            movies.await().map { Item(id = it.id, title = it.title, type = it.type, posters = it.posters) }).associateBy { it.id }
+        started.filter { (_, ts) -> ts > lastSeenMs }.entries.sortedByDescending { it.value }.forEach { (id, _) ->
+            ordered.putIfAbsent(id, allById[id] ?: runCatching { api.item(id) }.getOrNull() ?: return@forEach)
+        }
+        // Subscribed serials with nothing watched yet were started explicitly too (e.g. before
+        // startedAt existed): they also go before history, or they'd never make the cut.
+        val historyIds = history.await().map { it.item.id }.toSet()
+        serials.await().filter { it.subscribed && it.watched == 0 && it.id !in historyIds }.forEach { s ->
+            ordered.putIfAbsent(s.id, Item(id = s.id, title = s.title, type = s.type, posters = s.posters))
+        }
         history.await().forEach { ordered.putIfAbsent(it.item.id, it.item) }
         // Subscribed serials ("Я смотрю") belong on the row even without recent history.
         serials.await().filter { it.subscribed }.forEach { s ->
@@ -241,6 +256,7 @@ class Repository(
      * movies → a 1-second progress mark, which puts the movie into watching/movies.
      */
     suspend fun setWatching(item: Item, on: Boolean): Boolean {
+        prefs.markStarted(item.id, on)
         if (item.isSerial) {
             val now = item.inWatchlist == true
             return if (now != on) api.toggleWatchlist(item.id) else now
@@ -252,6 +268,7 @@ class Repository(
 
     /** Drop from Continue on kino.pub: clear history and unsubscribe a serial. */
     suspend fun removeFromContinue(itemId: Long) {
+        prefs.markStarted(itemId, false)
         api.clearHistory(itemId)
         runCatching {
             val item = api.item(itemId)

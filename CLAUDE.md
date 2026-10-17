@@ -124,6 +124,14 @@ optimized for "resume what I'm watching in one click". Read in order:
 - **Home Back**: first Back → scroll to top + focus first Continue card; there, Back shows
   "Нажмите «Назад» ещё раз…" and a second Back within 2.5 s finishes the activity. Returning from
   any screen restores focus to the card you left (`HomeViewModel.lastFocusKey`, keys `c:`/`w:`/`<row>:`).
+- Player seeking: ← / → accelerate while held (10 s → 30 s → 1 min → 2 min, by repeatCount).
+  With the tracks panel open, ↑ focuses the seek bar = scrubber: a second muted 360p ExoPlayer
+  (`PlayerController.previewPlayer`) decodes the frame at the marker into a TextureView; OK jumps.
+  kino.pub has no thumbnail sprites, hence the real-frame preview.
+- Tracks panel focus: the selected chip may be off-screen (not composed) — the row scrolls to it,
+  falls back to the first chip, and the root pulls focus into the panel on the next D-pad press.
+- Continue ordering: titles started via "Начал смотреть" (`LocalPrefs.startedAt`) and subscribed
+  serials with nothing watched lead the row; otherwise they fell past the 30-candidate cut.
 - Quality labels go by **width** (3840×1920 is 4K; height-based labelling showed it as 1080p).
 - NavHost transitions are disabled: a SurfaceView can't fade, leaving the player blinked.
 - The player logs (tag `denopub`) the HLS master's `#EXT-X-MEDIA` lines and the audio tracks vs
@@ -162,8 +170,9 @@ Commit after every meaningful change, with docs updated in the same commit, and 
 
 ## Open items (2026-10-17)
 
-- **Voiceover switching doesn't work on the TV** (owner report). Diagnostics are in: the player
-  logs the HLS master `#EXT-X-MEDIA` lines and audio tracks vs kino.pub `audios[]` under tag
-  `denopub` (`adb logcat -s denopub` while switching). Suspect: manifest order ≠ `audios[]` order,
-  or overrides not applying across mixed-playlist audio groups.
+- Voiceover switching: **fixed 2026-10-17, awaiting owner confirmation on the TV.** Root cause:
+  hls4 repeats every voiceover once per quality (GROUP-ID audio2160/1080/720/480), so ExoPlayer has
+  one audio TrackGroup per voiceover with a copy per quality; we used to treat each *track* as a
+  voiceover (64 "options", mapped by position → wrong voice). Now one option per group, override
+  with all its tracks, kino.pub metadata matched by the "NN." prefix of the rendition NAME.
 - Screensaver "widget" was offered and declined.

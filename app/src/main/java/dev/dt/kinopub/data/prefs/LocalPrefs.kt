@@ -63,6 +63,22 @@ class LocalPrefs(private val context: Context) {
         }
     }
 
+    private val kStarted = stringSetPreferencesKey("started_at") // "id:epochMs"
+
+    /** Titles the user explicitly started ("Начал смотреть") and when — they lead Continue. */
+    suspend fun startedAt(): Map<Long, Long> =
+        context.localStore.data.first()[kStarted].orEmpty().mapNotNull {
+            val (id, ts) = it.split(':').takeIf { p -> p.size == 2 } ?: return@mapNotNull null
+            (id.toLongOrNull() ?: return@mapNotNull null) to (ts.toLongOrNull() ?: 0L)
+        }.toMap()
+
+    suspend fun markStarted(id: Long, on: Boolean) {
+        context.localStore.edit { p ->
+            val rest = p[kStarted].orEmpty().filterNot { it.startsWith("$id:") }.toSet()
+            p[kStarted] = if (on) rest + "$id:${System.currentTimeMillis()}" else rest
+        }
+    }
+
     suspend fun seenWishlistIds(): Set<Long> =
         context.localStore.data.first()[kSeenWishlist].orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 

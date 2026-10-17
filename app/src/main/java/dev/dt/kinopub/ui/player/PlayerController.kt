@@ -138,6 +138,7 @@ class PlayerController(
         }
         file = f
         choiceApplied = false
+        releasePreview()
 
         val url = f.url.hls4 ?: f.url.hls ?: f.url.http!!
         val subs = v.subtitles.filter { s -> s.url != null }.mapIndexed { i, s ->
@@ -210,10 +211,30 @@ class PlayerController(
     // ---------- tracks ----------
 
     /** Audio formats in manifest order; kinopub's audios[] (1-based index) follows the same order. */
-    private fun audioTracks(): List<Triple<Tracks.Group, Int, Format>> =
-        player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.flatMap { g ->
-            (0 until g.length).filter { g.isTrackSupported(it) }.map { i -> Triple(g, i, g.getTrackFormat(i)) }
-        }
+    /** One selectable voiceover: an HLS audio rendition group + its kino.pub metadata. */
+    private data class AudioOpt(val group: Tracks.Group, val tracks: List<Int>, val format: Format, val meta: AudioTrack?)
+
+    /**
+     * kino.pub hls4 manifests repeat every voiceover once per quality (GROUP-ID audio2160/1080/720/480),
+     * so ExoPlayer exposes one TrackGroup per voiceover containing a copy per quality. A voiceover is
+     * therefore a *group*, never a single track (mapping tracks by position picked "Яроцкий 1080"
+     * when the chip said "Невафильм"). Names carry kino.pub's 1-based index: "02. Дубляж. Невафильм (RUS)".
+     */
+    private fun audioOptions(): List<AudioOpt> {
+        val audios = video?.audios?.sortedBy { it.index }.orEmpty()
+        return player.currentTracks.groups
+            .filter { it.type == C.TRACK_TYPE_AUDIO }
+            .mapNotNull { g -> (0 until g.length).filter { g.isTrackSupported(it) }.takeIf { it.isNotEmpty() }?.let { g to it } }
+            .mapIndexed { i, (g, tracks) ->
+                val f = g.getTrackFormat(tracks.first())
+                val n = Regex("^(\\d+)\\.").find(f.label.orEmpty())?.groupValues?.get(1)?.toIntOrNull()
+                val m = n?.let { k -> audios.firstOrNull { it.index == k } } ?: audios.getOrNull(i)
+                AudioOpt(g, tracks, f, m)
+            }
+    }
+
+    private fun cleanAudioLabel(raw: String?): String? =
+        raw?.replace(Regex("^\\d+\\.\\s*"), "")?.trim()?.takeIf { it.isNotBlank() }
 
     /**
      * Subtitles, most useful first: the remembered language, then Russian, then English, then the
@@ -237,32 +258,31 @@ class PlayerController(
         return all.sortedWith(compareBy({ rank(it.third) }, { subtitleName(it.third.label ?: it.third.language.orEmpty()) }))
     }
 
-    private fun meta(i: Int): AudioTrack? = video?.audios?.sortedBy { it.index }?.getOrNull(i)
 
     private fun logTracks(tag: String) {
-        val lines = audioTracks().mapIndexed { i, (g, t, f) ->
-            val m = meta(i)
-            "a$i sel=${g.isTrackSelected(t)} id=${f.id} label=${f.label} lang=${f.language} ch=${f.channelCount} " +
-                "mime=${f.sampleMimeType} | kp[${m?.index}]=${m?.author?.title}/${m?.type?.title}/${m?.lang}"
+        val lines = audioOptions().mapIndexed { i, o ->
+            "a$i sel=${o.group.isSelected} tracks=${o.tracks.size} label=${o.format.label} lang=${o.format.language} | " +
+                "kp[${o.meta?.index}]=${o.meta?.author?.title}/${o.meta?.type?.title}/${o.meta?.lang}"
         }
         android.util.Log.i("denopub", "$tag audio groups=${player.currentTracks.groups.count { it.type == C.TRACK_TYPE_AUDIO }}\n" + lines.joinToString("\n"))
     }
 
     private fun publishTracks() {
         logTracks("tracks")
-        val audio = audioTracks().mapIndexed { i, (g, t, f) ->
-            val m = meta(i)
+        val audio = audioOptions().mapIndexed { i, o ->
+            val m = o.meta
+            val f = o.format
             TrackOption(
                 key = "a$i",
                 label = m?.author?.title?.takeIf { it.isNotBlank() }
                     ?: m?.type?.title?.takeIf { it.isNotBlank() }
-                    ?: if (m != null && m.lang.isNullOrBlank()) "Оригинал" else f.label ?: f.language ?: "Дорожка ${i + 1}",
+                    ?: cleanAudioLabel(f.label) ?: f.language ?: "Дорожка ${i + 1}",
                 detail = listOfNotNull(
                     (m?.lang ?: f.language)?.takeIf { it.isNotBlank() }?.uppercase(),
                     channelsLabel(m?.channels ?: f.channelCount),
                     (m?.codec ?: f.sampleMimeType?.substringAfter('/'))?.uppercase(),
                 ).joinToString(" · ").ifBlank { null },
-                selected = g.isTrackSelected(t),
+                selected = o.group.isSelected,
             )
         }
         val text = textTracks()
@@ -281,14 +301,15 @@ class PlayerController(
     }
 
     fun selectAudio(index: Int, remember: Boolean = true) {
-        val (g, t, f) = audioTracks().getOrNull(index) ?: return
-        android.util.Log.i("denopub", "selectAudio $index -> id=${f.id} label=${f.label} lang=${f.language}")
+        val o = audioOptions().getOrNull(index) ?: return
+        android.util.Log.i("denopub", "selectAudio $index -> ${o.format.label}")
+        // Whole group: ExoPlayer picks the copy that matches the playing video variant.
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, t))
+            .setOverrideForType(TrackSelectionOverride(o.group.mediaTrackGroup, o.tracks))
             .build()
         if (remember) {
-            val m = meta(index)
-            saveChoice(choice.copy(audioLang = m?.lang ?: f.language, audioAuthor = m?.author?.title, audioType = m?.type?.title))
+            val m = o.meta
+            saveChoice(choice.copy(audioLang = m?.lang ?: o.format.language, audioAuthor = m?.author?.title, audioType = m?.type?.title))
         }
     }
 
@@ -314,7 +335,7 @@ class PlayerController(
 
     /** Remote shortcut (audio-track key): next voiceover. */
     fun cycleAudio() {
-        val n = audioTracks().size
+        val n = audioOptions().size
         if (n < 2) return
         val cur = _ui.value.audio.indexOfFirst { it.selected }
         selectAudio((cur + 1) % n)
@@ -334,11 +355,11 @@ class PlayerController(
 
     /** Re-apply the remembered picks to a freshly loaded episode, without re-saving them. */
     private fun applyChoice() {
-        val audio = audioTracks()
+        val audio = audioOptions()
         if (audio.isNotEmpty()) {
             val scored = audio.indices.map { i ->
-                val m = meta(i)
-                val f = audio[i].third
+                val m = audio[i].meta
+                val f = audio[i].format
                 var s = 0
                 if (choice.audioAuthor != null && m?.author?.title == choice.audioAuthor) s += 4
                 if (choice.audioType != null && m?.type?.title == choice.audioType) s += 1
@@ -404,7 +425,48 @@ class PlayerController(
         return parts.filter { it.isNotBlank() }.joinToString("  ·  ")
     }
 
+    // ---------- scrub preview ----------
+
+    private var preview: ExoPlayer? = null
+
+    /**
+     * A second, muted, lowest-quality player used only to show the frame at the scrub position.
+     * kino.pub has no thumbnail sprites, so we decode the real frame (keyframe-accurate, cheap at 360p).
+     */
+    fun previewPlayer(): ExoPlayer? {
+        preview?.let { return it }
+        val v = video ?: return null
+        val f = v.files.filter { it.url.hls4 != null || it.url.hls != null || it.url.http != null }.minByOrNull { it.h } ?: return null
+        val url = f.url.hls4 ?: f.url.hls ?: f.url.http!!
+        val p = ExoPlayer.Builder(getApplication())
+            .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(c.http)))
+            .build()
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .setMaxVideoSize(854, 480)
+            .setForceLowestBitrate(true)
+            .build()
+        p.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
+        p.setMediaItem(
+            MediaItem.Builder().setUri(url).apply { if (url.contains(".m3u8")) setMimeType(MimeTypes.APPLICATION_M3U8) }.build(),
+        )
+        p.volume = 0f
+        p.playWhenReady = false
+        p.prepare()
+        preview = p
+        return p
+    }
+
+    fun previewAt(ms: Long) { previewPlayer()?.seekTo(ms) }
+
+    fun releasePreview() {
+        preview?.release()
+        preview = null
+    }
+
     override fun onCleared() {
+        releasePreview()
         saveProgress()
         progressJob?.cancel()
         player.release()
