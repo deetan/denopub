@@ -162,8 +162,7 @@ fun HomeScreen(
     }
 
     // Back on Home: first go to the first "continue" card; there, a second Back within 2.5 s exits.
-    val firstKey = data.continueAdult.firstOrNull()?.let { "c:${it.itemId}" }
-        ?: data.continueKids.firstOrNull()?.let { "c:${it.itemId}" }
+    val firstKey = (data.continueSerials + data.continueMovies + data.continueKids).firstOrNull()?.let { "c:${it.itemId}" }
         ?: data.wishlist.firstOrNull()?.let { "w:${it.item.id}" }
     var exitArmed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -218,39 +217,24 @@ fun HomeScreen(
                         .then(if (first) Modifier.focusRequester(firstFocus) else Modifier),
                 )
 
-                // Grown-up titles read like text: the top row is the 4 most recent, left to right;
-                // the second row continues with the rest and scrolls sideways.
-                val adult = data.continueAdult
-                if (adult.isNotEmpty()) {
-                    Row(
-                        Modifier.padding(horizontal = K.screenPadH),
-                        horizontalArrangement = Arrangement.spacedBy(K.cardGap),
-                    ) {
-                        adult.take(TOP_ROW).forEachIndexed { i, e -> card(e, first = i == 0) }
-                    }
-                    if (adult.size > TOP_ROW) {
-                        LazyRow(
-                            state = continueRow,
-                            contentPadding = PaddingValues(horizontal = K.screenPadH),
-                            horizontalArrangement = Arrangement.spacedBy(K.cardGap),
-                        ) {
-                            itemsIndexed(adult.drop(TOP_ROW), key = { _, e -> e.itemId }) { _, e -> card(e, first = false) }
-                        }
-                    }
-                }
-                // Kids' titles get their own row, so a child finds cartoons without the rest.
-                if (data.continueKids.isNotEmpty()) {
+                // Three rows, each newest first (last watched or "Начал смотреть"):
+                // serials, movies, kids. The first card of the first non-empty row gets focus.
+                val rows = listOf(
+                    "Сериалы" to data.continueSerials,
+                    "Фильмы" to data.continueMovies,
+                    "Детям" to data.continueKids,
+                ).filter { it.second.isNotEmpty() }
+                rows.forEachIndexed { r, (label, entries) ->
                     Text(
-                        "Детям", style = MaterialTheme.typography.titleMedium, color = K.text,
+                        label, style = MaterialTheme.typography.titleMedium, color = K.text,
                         modifier = Modifier.padding(horizontal = K.screenPadH),
                     )
                     LazyRow(
+                        state = if (r == 0) continueRow else rememberLazyListState(),
                         contentPadding = PaddingValues(horizontal = K.screenPadH),
                         horizontalArrangement = Arrangement.spacedBy(K.cardGap),
                     ) {
-                        itemsIndexed(data.continueKids, key = { _, e -> e.itemId }) { i, e ->
-                            card(e, first = adult.isEmpty() && i == 0)
-                        }
+                        itemsIndexed(entries, key = { _, e -> e.itemId }) { i, e -> card(e, first = r == 0 && i == 0) }
                     }
                 }
             }
@@ -362,8 +346,6 @@ private fun Section(title: String, badge: String? = null, content: @Composable (
         content()
     }
 }
-
-private const val TOP_ROW = 4
 
 private fun continueMeta(e: ContinueEntry): String {
     val left = (e.durationSec - e.target.startSec).coerceAtLeast(0)

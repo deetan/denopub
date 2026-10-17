@@ -124,6 +124,16 @@ optimized for "resume what I'm watching in one click". Read in order:
 - **Home Back**: first Back → scroll to top + focus first Continue card; there, Back shows
   "Нажмите «Назад» ещё раз…" and a second Back within 2.5 s finishes the activity. Returning from
   any screen restores focus to the card you left (`HomeViewModel.lastFocusKey`, keys `c:`/`w:`/`<row>:`).
+- **Player overlay levels** (rule: ↓ reveals the next level, ↑ hides the current one):
+  NONE → ↑ FINE (top bar, frame stepping 0.5 s→1 s→3 s while held, EXACT seeks, pauses) ·
+  NONE → ↓ OSD (seek bar with white position marker; ← → scrub with preview, commits ~0.9 s after
+  key-up or on OK) → ↓ TRACKS panel (↑ from its top row → OSD). Paused = full-screen dim + ❚❚.
+  Player holds the chosen quality (`setForceHighestSupportedBitrate`), ABR used to sit at 1080p.
+- **Home Continue = three rows**: Сериалы / Фильмы / Детям, each sorted by `lastActivityMs` =
+  max(history last_seen, "Начал смотреть"). Up to 24 titles from 40 candidates.
+- **Title card**: Russian plot (kino.pub) + English plot and trailers/teasers from IMDb
+  (`data/api/ImdbClient.kt`, unofficial GraphQL `caching.graphql.imdb.com`; imdb.com HTML is behind
+  an anti-bot wall) + kino.pub trailer (`items/trailer`). Trailers play in `TrailerScreen`.
 - Player seeking: ← / → accelerate while held (10 s → 30 s → 1 min → 2 min, by repeatCount).
   With the tracks panel open, ↑ focuses the seek bar = scrubber: a second muted 360p ExoPlayer
   (`PlayerController.previewPlayer`) decodes the frame at the marker into a TextureView; OK jumps.

@@ -47,6 +47,7 @@ data class Item(
     val year: Int? = null,
     val plot: String? = null,
     val posters: Posters? = null,
+    val imdb: Long? = null,                      // numeric IMDb id → "tt" + 7 digits
     @SerialName("imdb_rating") val imdbRating: Double? = null,
     @SerialName("kinopoisk_rating") val kinopoiskRating: Double? = null,
     val genres: List<Named> = emptyList(),

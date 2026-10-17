@@ -72,6 +72,18 @@ class KinopubApi(
             .getOrElse { get("items/new", "type" to type, "page" to page) }
     suspend fun hot(type: String): ItemsResponse = get("items/hot", "type" to type)
     suspend fun popular(type: String): ItemsResponse = get("items/popular", "type" to type)
+    /** kino.pub's own trailer: a short-lived HLS link. Response shape varies (object or array). */
+    suspend fun trailerUrl(id: Long): String? = runCatching {
+        val root = get<kotlinx.serialization.json.JsonElement>("items/trailer", "id" to id)
+        val obj = (root as? kotlinx.serialization.json.JsonArray)?.firstOrNull() ?: root
+        val t = (obj as kotlinx.serialization.json.JsonObject)["trailer"] as? kotlinx.serialization.json.JsonObject ?: return null
+        val files = (t["files"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+            .mapNotNull { it as? kotlinx.serialization.json.JsonObject }
+        val best = files.maxByOrNull { (it["quality"]?.toString()?.filter(Char::isDigit)?.toIntOrNull() ?: 0) }
+        (best?.get("url") ?: t["url"])?.let { (it as kotlinx.serialization.json.JsonPrimitive).content }
+            ?.takeIf { it.startsWith("http") }
+    }.getOrNull()
+
     suspend fun search(q: String): ItemsResponse = get("items/search", "q" to q, "perpage" to 30)
 
     // ---------- Watching ----------

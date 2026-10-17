@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -61,14 +63,26 @@ import dev.dt.kinopub.ui.common.ProgressLine
 import dev.dt.kinopub.ui.theme.K
 import kotlinx.coroutines.delay
 
-private enum class Overlay { NONE, OSD, TRACKS }
+private enum class Overlay { NONE, FINE, OSD, TRACKS }
+
+/** Fine stepping: a tap = 0.5 s; holding speeds up to 1 s, then 3 s per step. */
+private fun fineStepMs(repeat: Int) = when {
+    repeat < 3 -> 500L
+    repeat < 10 -> 1_000L
+    else -> 3_000L
+}
 
 /**
- * Remote map (overlay hidden):
- *   OK / play-pause  → pause/resume + OSD     ← / → → −10 s / +10 s (hold to keep seeking)
- *   ↓                → tracks panel           ↑      → OSD
+ * Remote map:
+ *   ↑ (from video)   → FINE: thin top bar, ← → step 0.5 s (held: 1 s, 3 s), pauses; hides in 3 s
+ *   Rule everywhere: ↓ reveals the next level, ↑ hides the current one
+ *   ↓ once           → OSD: seek bar with position marker; ← → scrub with a preview frame, commits
+ *                      ~1 s after release or on OK
+ *   ↓ again          → TRACKS: voiceover / subtitles / quality panel; ↑ from its top row → OSD
+ *   ← / → (video)    → opens OSD and starts scrubbing (accelerates while held)
+ *   OK / play-pause  → pause/resume; paused = full-screen dim with a pause sign
  *   audio-track key  → next voiceover         CC key → subtitles on/off
- *   Back             → close tracks panel, else exit (progress is saved)
+ *   Back             → panel → OSD, scrub → cancel, otherwise exit (progress is saved)
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -84,41 +98,82 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     val rootFocus = remember { FocusRequester() }
     val view = LocalView.current
 
+    var pos by remember { mutableLongStateOf(0L) }
+    var dur by remember { mutableLongStateOf(0L) }
+    var playing by remember { mutableStateOf(true) }
+    var stats by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        while (true) {
+            pos = vm.player.currentPosition
+            dur = vm.player.duration.coerceAtLeast(0)
+            playing = vm.player.isPlaying || vm.player.playbackState == androidx.media3.common.Player.STATE_BUFFERING
+            stats = vm.stats()
+            delay(250)
+        }
+    }
+
+    var scrubMs by remember { mutableStateOf<Long?>(null) }
+    var scrubHint by remember { mutableStateOf<String?>(null) }
+    var scrubReleaseTick by remember { mutableIntStateOf(0) }
+    var fineLabel by remember { mutableStateOf("0,5 с") }
+    var panelHasFocus by remember { mutableStateOf(false) }
+    var panelFocusTick by remember { mutableIntStateOf(0) }
+
+    fun togglePause() { if (vm.player.isPlaying) vm.player.pause() else vm.player.play() }
+    fun cancelScrub() { scrubMs = null; vm.releasePreview() }
+    fun commitScrub() {
+        val s = scrubMs ?: return
+        vm.player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.DEFAULT)
+        vm.player.seekTo(s)
+        cancelScrub()
+    }
+    fun scrub(forward: Boolean, repeat: Int) {
+        val step = seekStepMs(repeat)
+        val next = ((scrubMs ?: pos) + if (forward) step else -step).coerceIn(0, maxOf(dur, 0))
+        scrubMs = next
+        scrubHint = (if (forward) "+" else "−") + stepLabel(step)
+        vm.previewAt(next)
+    }
+    fun fine(forward: Boolean, repeat: Int) {
+        if (vm.player.isPlaying) vm.player.pause()
+        vm.player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
+        val step = fineStepMs(repeat)
+        fineLabel = (if (forward) "+" else "−") + stepLabelFine(step)
+        vm.player.seekTo((vm.player.currentPosition + if (forward) step else -step).coerceIn(0, maxOf(dur, 0)))
+    }
+
     DisposableEffect(Unit) {
         view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false; vm.saveProgress() }
+        onDispose { view.keepScreenOn = false; vm.saveProgress(); vm.releasePreview() }
     }
-    // OSD auto-hides; the tracks panel stays until Back so you can read it.
-    // Outside the tracks panel the root owns focus, so the D-pad always works — including the
-    // first seconds with the OSD up and right after the panel closes (its chips took focus with them).
+    // Outside the tracks panel the root owns focus, so the D-pad always works.
     LaunchedEffect(overlay) {
         if (overlay != Overlay.TRACKS) repeat(10) {
             if (runCatching { rootFocus.requestFocus() }.isSuccess) return@LaunchedEffect
             delay(30)
         }
     }
-    LaunchedEffect(overlay, lastInput) {
-        if (overlay == Overlay.OSD) {
-            delay(4_000)
-            if (vm.player.isPlaying) overlay = Overlay.NONE
+    // Auto-hide: OSD after 4 s, the fine bar after 3 s of no input (not while scrubbing).
+    LaunchedEffect(overlay, lastInput, scrubMs == null) {
+        when (overlay) {
+            Overlay.OSD -> if (scrubMs == null) { delay(4_000); if (vm.player.isPlaying) overlay = Overlay.NONE }
+            Overlay.FINE -> { delay(3_000); overlay = Overlay.NONE }
+            else -> Unit
         }
     }
-    var seekHint by remember { mutableStateOf<String?>(null) }
-    var panelHasFocus by remember { mutableStateOf(false) }
-    var panelFocusTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(seekHint, lastInput) { if (seekHint != null) { delay(1_200); seekHint = null } }
-    /** Holding ← / → speeds up: 10 s → 30 s → 1 min → 2 min per step. */
-    fun seek(forward: Boolean, repeat: Int = 0) {
-        val step = seekStepMs(repeat)
-        val p = vm.player
-        p.seekTo((p.currentPosition + if (forward) step else -step).coerceIn(0, maxOf(p.duration, 0)))
-        seekHint = (if (forward) "+" else "−") + stepLabel(step)
-        overlay = if (overlay == Overlay.TRACKS) Overlay.TRACKS else Overlay.OSD
+    // Releasing ← / → while scrubbing: jump there after a beat (OK jumps at once).
+    LaunchedEffect(scrubReleaseTick) {
+        if (scrubReleaseTick == 0) return@LaunchedEffect
+        delay(900)
+        commitScrub()
     }
 
     BackHandler {
-        // Only the tracks panel is "modal"; the OSD is informational, so Back exits right away.
-        if (overlay == Overlay.TRACKS) overlay = Overlay.OSD else onExit()
+        when {
+            overlay == Overlay.TRACKS -> overlay = Overlay.OSD
+            scrubMs != null -> cancelScrub()
+            else -> onExit()
+        }
     }
 
     Box(
@@ -128,11 +183,15 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { e ->
+                val dpadLR = e.key == Key.DirectionLeft || e.key == Key.DirectionRight
+                if (e.type == KeyEventType.KeyUp) {
+                    if (dpadLR && overlay == Overlay.OSD && scrubMs != null) scrubReleaseTick++
+                    return@onPreviewKeyEvent false
+                }
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 lastInput = System.currentTimeMillis()
                 if (overlay == Overlay.TRACKS) {
-                    // Panel handles its own D-pad — unless focus never made it into the panel
-                    // (then the root still holds it and every key would be lost). Pull it in.
+                    // The panel handles its own D-pad — unless focus never made it in.
                     if (!panelHasFocus && e.key in DPAD_KEYS) { panelFocusTick++; return@onPreviewKeyEvent true }
                     return@onPreviewKeyEvent false
                 }
@@ -141,18 +200,40 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     AKeyEvent.KEYCODE_CAPTIONS -> { vm.toggleSubtitles(); overlay = Overlay.OSD; return@onPreviewKeyEvent true }
                     AKeyEvent.KEYCODE_MEDIA_NEXT -> { vm.playNext(); return@onPreviewKeyEvent true }
                 }
+                val repeat = e.nativeKeyEvent.repeatCount
                 when (e.key) {
-                    Key.DirectionCenter, Key.Enter, Key.MediaPlayPause, Key.Spacebar -> {
-                        if (vm.player.isPlaying) vm.player.pause() else vm.player.play()
-                        overlay = Overlay.OSD; true
-                    }
+                    Key.MediaPlayPause, Key.Spacebar -> { togglePause(); true }
                     Key.MediaPlay -> { vm.player.play(); true }
-                    Key.MediaPause -> { vm.player.pause(); overlay = Overlay.OSD; true }
-                    Key.DirectionLeft, Key.MediaRewind -> { seek(forward = false, e.nativeKeyEvent.repeatCount); true }
-                    Key.DirectionRight, Key.MediaFastForward -> { seek(forward = true, e.nativeKeyEvent.repeatCount); true }
-                    Key.DirectionDown -> { overlay = Overlay.TRACKS; true }
-                    Key.DirectionUp -> { overlay = Overlay.OSD; true }
-                    else -> false
+                    Key.MediaPause -> { vm.player.pause(); true }
+                    Key.MediaRewind -> { overlay = Overlay.OSD; scrub(false, repeat); scrubReleaseTick++; true }
+                    Key.MediaFastForward -> { overlay = Overlay.OSD; scrub(true, repeat); scrubReleaseTick++; true }
+                    else -> when (overlay) {
+                        Overlay.FINE -> when (e.key) {
+                            Key.DirectionLeft -> { fine(false, repeat); true }
+                            Key.DirectionRight -> { fine(true, repeat); true }
+                            // ↓ reveals, ↑ hides — the same rule on every level.
+                            Key.DirectionUp -> { overlay = Overlay.NONE; true }
+                            Key.DirectionDown -> { overlay = Overlay.OSD; true }
+                            Key.DirectionCenter, Key.Enter -> { togglePause(); true }
+                            else -> false
+                        }
+                        Overlay.OSD -> when (e.key) {
+                            Key.DirectionLeft -> { scrub(false, repeat); true }
+                            Key.DirectionRight -> { scrub(true, repeat); true }
+                            Key.DirectionDown -> { cancelScrub(); overlay = Overlay.TRACKS; true }
+                            Key.DirectionUp -> { cancelScrub(); overlay = Overlay.NONE; true }
+                            Key.DirectionCenter, Key.Enter -> { if (scrubMs != null) commitScrub() else togglePause(); true }
+                            else -> false
+                        }
+                        else -> when (e.key) { // NONE
+                            Key.DirectionUp -> { overlay = Overlay.FINE; true }
+                            Key.DirectionDown -> { overlay = Overlay.OSD; true }
+                            Key.DirectionLeft -> { overlay = Overlay.OSD; scrub(false, repeat); true }
+                            Key.DirectionRight -> { overlay = Overlay.OSD; scrub(true, repeat); true }
+                            Key.DirectionCenter, Key.Enter -> { togglePause(); overlay = Overlay.OSD; true }
+                            else -> false
+                        }
+                    }
                 }
             },
     ) {
@@ -161,8 +242,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                 // PlayerView defaults to SurfaceView: required for HDR/Dolby Vision output.
                 PlayerView(ctx).apply {
                     useController = false
-                    // PlayerView handles D-pad itself and could steal focus from the Compose root,
-                    // which made ↓ / ← / → randomly do nothing on the TV.
+                    // PlayerView handles D-pad itself and could steal focus from the Compose root.
                     isFocusable = false
                     isFocusableInTouchMode = false
                     descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -174,134 +254,104 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             modifier = Modifier.fillMaxSize(),
         )
 
+        // Paused: dim the picture and show a big pause sign (not while stepping frames).
+        if (!playing && overlay != Overlay.FINE && ui.error == null) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+                Text("❚❚", fontSize = 120.sp, color = Color.White.copy(alpha = 0.9f))
+            }
+        }
+
         ui.error?.let {
             Text("Ошибка воспроизведения: $it", color = K.badge, modifier = Modifier.align(Alignment.Center))
         }
 
-        if (overlay != Overlay.NONE) {
+        if (overlay == Overlay.FINE) {
+            Column(
+                Modifier.align(Alignment.TopStart).fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = K.screenPadH, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SeekBar(pos, dur, null, emphasized = true)
+                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Text(clockMs(pos), style = MaterialTheme.typography.titleMedium, color = K.accent)
+                    Text(
+                        "покадрово: ← → по 0,5 с (удерживайте — быстрее) $fineLabel  ·  OK пауза  ·  ↑ скрыть",
+                        style = MaterialTheme.typography.labelMedium, color = K.muted,
+                    )
+                }
+            }
+        }
+
+        if (overlay == Overlay.OSD || overlay == Overlay.TRACKS) {
             Column(
                 Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
                     .background(Color.Black.copy(alpha = 0.6f))
                     .padding(horizontal = K.screenPadH, vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Osd(vm, ui, seekHint, seekable = overlay == Overlay.TRACKS)
-                if (overlay == Overlay.TRACKS) TracksPanel(vm, ui, panelFocusTick) { panelHasFocus = it }
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(ui.title, style = MaterialTheme.typography.headlineSmall, color = K.text)
+                    ui.episodeLabel?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.muted) }
+                }
+                // Preview frame above the scrub marker.
+                scrubMs?.let { s ->
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val frac = if (dur > 0) (s.toFloat() / dur).coerceIn(0f, 1f) else 0f
+                        val w = 320.dp
+                        Column(Modifier.padding(start = (maxWidth - w) * frac), horizontalAlignment = Alignment.CenterHorizontally) {
+                            AndroidView(
+                                factory = { ctx -> android.view.TextureView(ctx).also { tv -> vm.previewPlayer()?.setVideoTextureView(tv) } },
+                                modifier = Modifier.width(w).height(180.dp).clip(RoundedCornerShape(6.dp)).background(Color.Black),
+                            )
+                            Text(clock(s), style = MaterialTheme.typography.titleMedium, color = K.accent)
+                        }
+                    }
+                }
+                SeekBar(pos, dur, scrubMs, emphasized = overlay == Overlay.OSD)
+                Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(clock(pos), style = MaterialTheme.typography.labelMedium, color = K.muted)
+                    if (scrubMs != null) scrubHint?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.accent) }
+                    Text("−" + clock((dur - pos).coerceAtLeast(0)), style = MaterialTheme.typography.labelMedium, color = K.muted)
+                }
+                if (overlay == Overlay.OSD) {
+                    Text(
+                        if (scrubMs != null) "← →  выбрать момент (удерживайте — быстрее)  ·  отпустите или OK — перейти  ·  Back — отмена"
+                        else "← →  перемотка с превью, удерживайте — быстрее  ·  ↓ — озвучка, субтитры, качество  ·  ↑ — покадрово",
+                        style = MaterialTheme.typography.labelMedium, color = K.muted,
+                    )
+                    if (stats.isNotEmpty()) Text(stats, style = MaterialTheme.typography.labelMedium, color = K.muted.copy(alpha = 0.8f))
+                }
+                if (overlay == Overlay.TRACKS) {
+                    TracksPanel(vm, ui, panelFocusTick, onFocusInside = { panelHasFocus = it }, onExitUp = { overlay = Overlay.OSD })
+                }
             }
         }
     }
 }
 
-/**
- * Title, seek bar, times, hint and a stats line (resolution · codec/HDR · bitrate · network · buffer).
- *
- * With the tracks panel open the seek bar is focusable (↑ from the first chip row) and works as a
- * scrubber: ← / → move a marker (accelerating when held) with a preview frame of that moment
- * above it; OK jumps there; leaving the bar cancels.
- */
+/** Track + played part + a vertical marker at the current position (and at the scrub point). */
 @Composable
-private fun Osd(vm: PlayerController, ui: PlayerUi, seekHint: String?, seekable: Boolean) {
-    var pos by remember { mutableLongStateOf(0L) }
-    var dur by remember { mutableLongStateOf(0L) }
-    var stats by remember { mutableStateOf("") }
-    var barFocused by remember { mutableStateOf(false) }
-    var scrubMs by remember { mutableStateOf<Long?>(null) }
-    var scrubHint by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            pos = vm.player.currentPosition
-            dur = vm.player.duration.coerceAtLeast(0)
-            stats = vm.stats()
-            delay(500)
-        }
-    }
-    DisposableEffect(Unit) { onDispose { vm.releasePreview() } }
-
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(ui.title, style = MaterialTheme.typography.headlineSmall, color = K.text)
-        ui.episodeLabel?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.muted) }
-    }
-
-    // Preview frame above the marker while scrubbing.
-    scrubMs?.let { s ->
-        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val frac = if (dur > 0) (s.toFloat() / dur).coerceIn(0f, 1f) else 0f
-            val w = 320.dp
-            val x = (maxWidth - w) * frac
-            Column(Modifier.padding(start = x), horizontalAlignment = Alignment.CenterHorizontally) {
-                AndroidView(
-                    factory = { ctx ->
-                        android.view.TextureView(ctx).also { tv -> vm.previewPlayer()?.setVideoTextureView(tv) }
-                    },
-                    modifier = Modifier.width(w).height(180.dp).clip(RoundedCornerShape(6.dp)).background(Color.Black),
-                )
-                Text(clock(s), style = MaterialTheme.typography.titleMedium, color = K.accent)
-            }
-        }
-    }
-
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .then(
-                if (seekable) Modifier
-                    .onFocusChanged {
-                        barFocused = it.isFocused
-                        if (!it.isFocused) { scrubMs = null; vm.releasePreview() }
-                    }
-                    .onPreviewKeyEvent { e ->
-                        if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        when (e.key) {
-                            Key.DirectionLeft, Key.DirectionRight -> {
-                                val step = seekStepMs(e.nativeKeyEvent.repeatCount)
-                                val fwd = e.key == Key.DirectionRight
-                                val next = ((scrubMs ?: pos) + if (fwd) step else -step).coerceIn(0, dur)
-                                scrubMs = next
-                                scrubHint = (if (fwd) "+" else "−") + stepLabel(step)
-                                vm.previewAt(next)
-                                true
-                            }
-                            Key.DirectionCenter, Key.Enter -> {
-                                val s = scrubMs
-                                if (s != null) { vm.player.seekTo(s); scrubMs = null; vm.releasePreview() }
-                                else if (vm.player.isPlaying) vm.player.pause() else vm.player.play()
-                                true
-                            }
-                            Key.Back -> if (scrubMs != null) { scrubMs = null; vm.releasePreview(); true } else false
-                            else -> false
-                        }
-                    }
-                    .focusable()
-                else Modifier,
-            ),
-    ) {
-        ProgressLine(if (dur > 0) pos.toFloat() / dur else 0f, height = if (barFocused) 8.dp else 4.dp)
+private fun SeekBar(pos: Long, dur: Long, scrubMs: Long?, emphasized: Boolean) {
+    val h = if (emphasized) 8.dp else 4.dp
+    BoxWithConstraints(Modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.CenterStart) {
+        val frac = if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
+        ProgressLine(frac, height = h)
+        Box(Modifier.padding(start = (maxWidth - 4.dp) * frac).width(4.dp).height(22.dp).background(Color.White))
         scrubMs?.let { s ->
-            // Marker at the scrub position.
-            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val frac = if (dur > 0) (s.toFloat() / dur).coerceIn(0f, 1f) else 0f
-                Box(Modifier.padding(start = (maxWidth - 4.dp) * frac).width(4.dp).height(16.dp).background(Color.White))
-            }
+            val sf = if (dur > 0) (s.toFloat() / dur).coerceIn(0f, 1f) else 0f
+            Box(Modifier.padding(start = (maxWidth - 4.dp) * sf).width(4.dp).height(22.dp).background(K.accent))
         }
     }
-    Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Text(clock(pos), style = MaterialTheme.typography.labelMedium, color = K.muted)
-        (if (scrubMs != null) scrubHint else seekHint)?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.accent) }
-        Text("−" + clock((dur - pos).coerceAtLeast(0)), style = MaterialTheme.typography.labelMedium, color = K.muted)
-    }
-    Text(
-        when {
-            scrubMs != null -> "← →  выбрать момент  ·  OK — перейти  ·  ↓ — отмена"
-            barFocused -> "← →  показать кадр и выбрать момент  ·  OK — пауза"
-            seekable -> "← →  ±10 с, удерживайте — быстрее  ·  ↑ на полосу — перемотка с превью"
-            else -> "← →  ±10 с, удерживайте — быстрее  ·  ↓ — озвучка, субтитры, качество"
-        },
-        style = MaterialTheme.typography.labelMedium, color = K.muted,
-    )
-    if (stats.isNotEmpty()) Text(stats, style = MaterialTheme.typography.labelMedium, color = K.muted.copy(alpha = 0.8f))
+}
+
+private fun stepLabelFine(ms: Long) = if (ms < 1000) "0,5 с" else "${ms / 1000} с"
+
+private fun clockMs(ms: Long): String {
+    val tenths = (ms % 1000) / 100
+    return clock(ms) + ",$tenths"
 }
 
 /** Accelerating step while a seek key is held (repeatCount from the key event). */
@@ -319,7 +369,13 @@ private fun stepLabel(ms: Long): String = if (ms >= 60_000) "${ms / 60_000} ми
  * Current choice gets focus when the panel opens, so ← → OK is the whole interaction.
  */
 @Composable
-private fun TracksPanel(vm: PlayerController, ui: PlayerUi, focusTick: Int, onFocusInside: (Boolean) -> Unit) {
+private fun TracksPanel(
+    vm: PlayerController,
+    ui: PlayerUi,
+    focusTick: Int,
+    onFocusInside: (Boolean) -> Unit,
+    onExitUp: () -> Unit,
+) {
     val audioFocus = remember { FocusRequester() }
     val firstFocus = remember { FocusRequester() }
     // Focus the current voiceover (its row scrolls to it first); fall back to the first chip.
@@ -337,7 +393,12 @@ private fun TracksPanel(vm: PlayerController, ui: PlayerUi, focusTick: Int, onFo
             .clip(RoundedCornerShape(10.dp)).background(K.surface.copy(alpha = 0.92f)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        TrackRow("Озвучка", ui.audio, audioFocus, firstFocus) { i, _ -> vm.selectAudio(i) }
+        // ↑ from the top row leaves the panel and brings the seek bar back.
+        Box(Modifier.onPreviewKeyEvent { e ->
+            if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp) { onExitUp(); true } else false
+        }) {
+            TrackRow("Озвучка", ui.audio, audioFocus, firstFocus) { i, _ -> vm.selectAudio(i) }
+        }
         TrackRow("Субтитры", ui.subtitles, null) { i, _ -> vm.selectSubtitle(if (i == 0) null else i - 1) }
         TrackRow("Качество", ui.qualities, null) { _, o -> o.key.removePrefix("q").toIntOrNull()?.let(vm::selectQuality) }
         if (ui.hasNext) {

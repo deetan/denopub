@@ -28,6 +28,8 @@ object Routes {
     const val HOME = "home"
     const val DETAILS = "details/{id}"
     const val SEARCH = "search"
+    const val TRAILER = "trailer?url={url}&title={title}"
+    fun trailer(url: String, title: String) = "trailer?url=${android.net.Uri.encode(url)}&title=${android.net.Uri.encode(title)}"
     const val PLAYER = "player/{id}?season={season}&episode={episode}&start={start}"
 
     fun details(id: Long) = "details/$id"
@@ -81,6 +83,16 @@ fun KinoNavHost(c: AppContainer) {
                     c, e.arguments!!.getLong("id"),
                     onPlay = { nav.navigate(Routes.player(it)) },
                     onBack = { nav.popBackStack() },
+                    onTrailer = { url, title -> nav.navigate(Routes.trailer(url, title)) },
+                )
+            }
+            composable(
+                Routes.TRAILER,
+                listOf(navArgument("url") { type = NavType.StringType }, navArgument("title") { type = NavType.StringType; defaultValue = "" }),
+            ) { e ->
+                dev.dt.kinopub.ui.player.TrailerScreen(
+                    c, e.arguments!!.getString("url")!!, e.arguments!!.getString("title").orEmpty(),
+                    onExit = { nav.popBackStack() },
                 )
             }
             composable(

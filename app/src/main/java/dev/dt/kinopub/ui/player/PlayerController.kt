@@ -163,6 +163,12 @@ class PlayerController(
                 }
             }
         }
+        // Stay at the chosen quality: ABR otherwise starts low and often sits at 1080p on a 4K
+        // file even on a fast network. Cap at the chosen file's height.
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setForceHighestSupportedBitrate(true)
+            .setMaxVideoSize(Int.MAX_VALUE, if (choice.maxHeight != null) f.h else Int.MAX_VALUE)
+            .build()
         player.setMediaItem(mediaItem, positionMs)
         player.prepare()
         player.playWhenReady = true

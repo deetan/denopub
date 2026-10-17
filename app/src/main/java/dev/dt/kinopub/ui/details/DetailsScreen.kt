@@ -30,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,7 +59,13 @@ import kotlinx.coroutines.launch
  * with kino.pub: wishlist, "watching", watched. Long-press an episode for per-episode actions.
  */
 @Composable
-fun DetailsScreen(c: AppContainer, id: Long, onPlay: (ResumeTarget) -> Unit, onBack: () -> Unit) {
+fun DetailsScreen(
+    c: AppContainer,
+    id: Long,
+    onPlay: (ResumeTarget) -> Unit,
+    onBack: () -> Unit,
+    onTrailer: (url: String, title: String) -> Unit,
+) {
     var item by remember { mutableStateOf<Item?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var wishlisted by remember { mutableStateOf<Boolean?>(null) }
@@ -66,11 +74,17 @@ fun DetailsScreen(c: AppContainer, id: Long, onPlay: (ResumeTarget) -> Unit, onB
     var reloads by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val playFocus = remember { FocusRequester() }
+    val trailerFocus = remember { FocusRequester() }
 
     LaunchedEffect(id, reloads) {
         runCatching { item = c.repository.item(id) }.onFailure { error = it.message }
     }
     LaunchedEffect(id) { wishlisted = runCatching { c.repository.isInWishlist(id) }.getOrNull() }
+    // Extra info: English plot + trailers from IMDb, and kino.pub's own trailer.
+    var imdb by remember { mutableStateOf<dev.dt.kinopub.data.api.ImdbInfo?>(null) }
+    var kpTrailer by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(item?.imdb) { item?.imdb?.let { imdb = c.imdb.info(it) } }
+    LaunchedEffect(id) { kpTrailer = runCatching { c.api.trailerUrl(id) }.getOrNull() }
 
     /** Run a kino.pub write, show a confirmation, re-read the item so statuses are real. */
     fun act(done: String, block: suspend () -> Unit) {
@@ -147,14 +161,22 @@ fun DetailsScreen(c: AppContainer, id: Long, onPlay: (ResumeTarget) -> Unit, onB
                         Text(it.genres.mapNotNull { g -> g.title }.joinToString(", "), style = MaterialTheme.typography.labelMedium, color = K.muted)
                     }
                     it.plot?.let { p ->
-                        Text(p, style = MaterialTheme.typography.bodyMedium, color = K.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(p, style = MaterialTheme.typography.bodyMedium, color = K.text.copy(alpha = 0.85f), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    }
+                    imdb?.plot?.let { p ->
+                        Text("IMDb · $p", style = MaterialTheme.typography.bodyMedium, color = K.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
 
             // Actions: primary first (focused), then toggles that write to kino.pub
             val r = resume
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val hasTrailers = kpTrailer != null || !imdb?.videos.isNullOrEmpty()
+            // ↓ from the actions goes to the trailers row (geometry alone skipped it to seasons).
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.focusProperties { if (hasTrailers) down = trailerFocus },
+            ) {
                 Button(
                     onClick = { onPlay(r ?: ResumeTarget(it.id, it.seasons.firstOrNull()?.number, 1, 0)) },
                     modifier = Modifier.focusRequester(playFocus),
@@ -181,6 +203,24 @@ fun DetailsScreen(c: AppContainer, id: Long, onPlay: (ResumeTarget) -> Unit, onB
                 OutlinedButton(onClick = {
                     act(if (fullyWatched) "Отметка снята" else "Отмечено просмотренным") { c.repository.setItemWatched(it, !fullyWatched) }
                 }) { Text(if (fullyWatched) "Просмотрено ✓" else "Отметить просмотренным") }
+            }
+
+            // Trailers: kino.pub's + IMDb's (trailers and teasers, newest first as IMDb lists them).
+            val trailers = buildList {
+                kpTrailer?.let { add(TrailerChip("Трейлер · kino.pub", null, it)) }
+                imdb?.videos?.forEach { v -> add(TrailerChip(v.name, v.seconds, v.url)) }
+            }
+            if (trailers.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    itemsIndexed(trailers, key = { _, t -> t.url }) { i, t ->
+                        OutlinedButton(
+                            onClick = { onTrailer(t.url, "$titleRu — ${t.name}") },
+                            modifier = if (i == 0) Modifier.focusRequester(trailerFocus) else Modifier,
+                        ) {
+                            Text("▶ ${t.name}" + (t.seconds?.let { s -> " · ${s / 60}:${"%02d".format(s % 60)}" } ?: ""), maxLines = 1)
+                        }
+                    }
+                }
             }
 
             // Seasons → episodes
@@ -221,6 +261,8 @@ fun DetailsScreen(c: AppContainer, id: Long, onPlay: (ResumeTarget) -> Unit, onB
         }
     }
 }
+
+private data class TrailerChip(val name: String, val seconds: Int?, val url: String)
 
 /** kino.pub's marktime stores time without changing status, so "in progress" = time > 0, not finished. */
 private fun resumeSec(v: Video): Int = v.watching?.takeIf { it.status != 1 }?.time ?: 0

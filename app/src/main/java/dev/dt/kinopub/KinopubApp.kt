@@ -47,6 +47,7 @@ class AppContainer(app: Application) {
     val registration = DeviceRegistration(api)
 
     val watchNext = dev.dt.kinopub.system.WatchNext(app)
+    val imdb = dev.dt.kinopub.data.api.ImdbClient(http)
 
     /** A "resume this" request from a deep link (Google TV Continue watching row). */
     val pendingPlay = kotlinx.coroutines.flow.MutableStateFlow<dev.dt.kinopub.data.ResumeTarget?>(null)

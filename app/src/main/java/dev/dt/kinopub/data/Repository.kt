@@ -49,6 +49,8 @@ data class HomeData(
 ) {
     val newInWishlist: Int get() = wishlist.count { it.isNew }
     val continueAdult: List<ContinueEntry> get() = continueWatching.filterNot { it.isKids }
+    val continueSerials: List<ContinueEntry> get() = continueAdult.filter { it.isSerial }
+    val continueMovies: List<ContinueEntry> get() = continueAdult.filterNot { it.isSerial }
     val continueKids: List<ContinueEntry> get() = continueWatching.filter { it.isKids }
 }
 
@@ -93,7 +95,7 @@ class Repository(
      * Everything in progress, most recently watched first. History gives the order and the
      * last-touched episode; /watching gives exact per-episode status to pick the resume point.
      */
-    suspend fun continueWatching(limit: Int = 15): List<ContinueEntry> = coroutineScope {
+    suspend fun continueWatching(limit: Int = 24): List<ContinueEntry> = coroutineScope {
         // One binge can fill a whole history page, so read two.
         val history = async { api.history(1) + runCatching { api.history(2) }.getOrDefault(emptyList()) }
         val serials = async { api.watchingSerials() }
@@ -122,7 +124,7 @@ class Repository(
         // Kids/adult comes from a persistent cache only, so Home never waits on /items calls;
         // unknown titles are classified afterwards by classifyKids().
         val kids = prefs.kidsFlags()
-        candidates.values.take(limit * 2).map { item ->
+        candidates.values.take(40).map { item ->
             async {
                 runCatching {
                     val info = api.watching(item.id)
