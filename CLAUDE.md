@@ -157,5 +157,13 @@ optimized for "resume what I'm watching in one click". Read in order:
 
 ## Git / backup rule
 
-Commit after every meaningful change, with docs updated in the same commit. Remote: not set up
-yet (intended `github.com/deetan/kinopub-android-tv`, private) — push only when the user asks.
+Commit after every meaningful change, with docs updated in the same commit, and push to
+`origin` = `github.com/deetan/kinopub-android-tv` (private).
+
+## Open items (2026-10-17)
+
+- **Voiceover switching doesn't work on the TV** (owner report). Diagnostics are in: the player
+  logs the HLS master `#EXT-X-MEDIA` lines and audio tracks vs kino.pub `audios[]` under tag
+  `denopub` (`adb logcat -s denopub` while switching). Suspect: manifest order ≠ `audios[]` order,
+  or overrides not applying across mixed-playlist audio groups.
+- Screensaver "widget" was offered and declined.
