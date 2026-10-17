@@ -17,6 +17,9 @@ data class HomeState(
 
 class HomeViewModel(private val repo: Repository) : ViewModel() {
     // Start from the on-disk copy of the last Home: instant launch, fresh data replaces it.
+    /** Key of the last focused card ("c:<id>", "w:<id>", "<row>:<id>"), to restore on return. */
+    var lastFocusKey: String? = null
+
     private val _state = MutableStateFlow(HomeState(data = repo.cachedHome()))
     val state: StateFlow<HomeState> = _state
 

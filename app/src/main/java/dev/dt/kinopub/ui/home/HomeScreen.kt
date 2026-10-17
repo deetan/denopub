@@ -20,6 +20,10 @@ import dev.dt.kinopub.ui.common.plural
 import dev.dt.kinopub.ui.common.ActionMenu
 import dev.dt.kinopub.ui.common.MenuAction
 import androidx.compose.ui.input.key.Key
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -131,13 +135,50 @@ fun HomeScreen(
     // Focus the first card as soon as anything is on screen (cached data), and again when the
     // fresh load lands — unless the user has already started moving around.
     var userMoved by remember { mutableStateOf(false) }
+    // Coming back from a title card / search / player: return focus to the card you left from.
+    // Rows keep their scroll position (saveable lazy states), so that card is on screen.
+    val restoreFocus = remember { FocusRequester() }
+    val restoreKey = remember { vm.lastFocusKey }
+    val track: Modifier.(String) -> Modifier = { key ->
+        this.onFocusChanged { if (it.isFocused) vm.lastFocusKey = key }
+            .then(if (key == restoreKey) Modifier.focusRequester(restoreFocus) else Modifier)
+    }
     LaunchedEffect(state.loading, data != null) {
         if (data == null || (focusedOnce && (userMoved || state.loading))) return@LaunchedEffect
+        if (!focusedOnce && restoreKey != null) {
+            repeat(20) {
+                if (runCatching { restoreFocus.requestFocus() }.isSuccess) {
+                    focusedOnce = true; userMoved = true; return@LaunchedEffect
+                }
+                kotlinx.coroutines.delay(50)
+            }
+        }
         column.scrollToItem(0)
         continueRow.scrollToItem(0)
         repeat(20) {
             if (runCatching { firstFocus.requestFocus() }.isSuccess) { focusedOnce = true; return@LaunchedEffect }
             kotlinx.coroutines.delay(50)
+        }
+    }
+
+    // Back on Home: first go to the first "continue" card; there, a second Back within 2.5 s exits.
+    val firstKey = data.continueAdult.firstOrNull()?.let { "c:${it.itemId}" }
+        ?: data.continueKids.firstOrNull()?.let { "c:${it.itemId}" }
+        ?: data.wishlist.firstOrNull()?.let { "w:${it.item.id}" }
+    var exitArmed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val activity = LocalContext.current as? android.app.Activity
+    LaunchedEffect(exitArmed) { if (exitArmed) { kotlinx.coroutines.delay(2_500); exitArmed = false } }
+    BackHandler {
+        when {
+            firstKey != null && vm.lastFocusKey != firstKey -> scope.launch {
+                exitArmed = false
+                column.animateScrollToItem(0)
+                continueRow.scrollToItem(0)
+                runCatching { firstFocus.requestFocus() }
+            }
+            exitArmed -> activity?.finish()
+            else -> exitArmed = true
         }
     }
 
@@ -173,6 +214,7 @@ fun HomeScreen(
                     width = 200.dp,
                     modifier = Modifier
                         .onFocusChanged { if (it.isFocused) focused = e }
+                        .track("c:${e.itemId}")
                         .then(if (first) Modifier.focusRequester(firstFocus) else Modifier),
                 )
 
@@ -226,6 +268,7 @@ fun HomeScreen(
                             onLongClick = { itemMenu(w.item.id, splitTitle(w.item.title).first, inWishlist = true) },
                             modifier = Modifier
                                 .onFocusChanged { if (it.isFocused) vm.onWishlistFocus(w.item.id) else vm.onWishlistBlur(w.item.id) }
+                                .track("w:${w.item.id}")
                                 .then(if (data.continueWatching.isEmpty() && w == data.wishlist.first()) Modifier.focusRequester(firstFocus) else Modifier),
                         )
                     }
@@ -234,9 +277,9 @@ fun HomeScreen(
         }
 
         val onMenu: (Item) -> Unit = { itemMenu(it.id, splitTitle(it.title).first, inWishlist = false) }
-        posterRow("Новые фильмы", data.freshMovies, onOpen, onMenu)
-        posterRow("Новые сериалы", data.freshSerials, onOpen, onMenu)
-        posterRow("Популярное", data.hot, onOpen, onMenu)
+        posterRow("Новые фильмы", data.freshMovies, onOpen, onMenu, track)
+        posterRow("Новые сериалы", data.freshSerials, onOpen, onMenu, track)
+        posterRow("Популярное", data.hot, onOpen, onMenu, track)
     }
         // Always-visible search entry, top-right; ↑ from the first row reaches it.
         OutlinedButton(
@@ -249,12 +292,20 @@ fun HomeScreen(
                 .onPreviewKeyEvent {
                     if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (it.key) {
-                        Key.DirectionDown, Key.DirectionLeft, Key.Back ->
+                        Key.DirectionDown, Key.DirectionLeft ->
                             runCatching { firstFocus.requestFocus() }.isSuccess
                         else -> false
                     }
                 },
         ) { Text("Поиск") }
+        if (exitArmed) {
+            Text(
+                "Нажмите «Назад» ещё раз, чтобы выйти", color = K.text, style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp)
+                    .background(K.surfaceHi, androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+        }
         state.message?.let {
             Text(
                 it, color = K.text, style = MaterialTheme.typography.bodyMedium,
@@ -268,6 +319,7 @@ fun HomeScreen(
 
 private fun androidx.compose.foundation.lazy.LazyListScope.posterRow(
     title: String, items: List<Item>, onOpen: (Long) -> Unit, onMenu: (Item) -> Unit,
+    track: Modifier.(String) -> Modifier,
 ) {
     if (items.isEmpty()) return
     item(title) {
@@ -284,6 +336,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.posterRow(
                             .joinToString(" · "),
                         onClick = { onOpen(it.id) },
                         onLongClick = { onMenu(it) },
+                        modifier = Modifier.track("$title:${it.id}"),
                     )
                 }
             }

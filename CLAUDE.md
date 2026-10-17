@@ -103,6 +103,9 @@ optimized for "resume what I'm watching in one click". Read in order:
 - **PlayerView must be non-focusable** (`isFocusable=false`, `FOCUS_BLOCK_DESCENDANTS`): it eats
   D-pad keys otherwise, so ↓ "sometimes" didn't open the panel on the real TV. The Compose root
   re-requests focus on every overlay change except the tracks panel.
+- **Home Back**: first Back → scroll to top + focus first Continue card; there, Back shows
+  "Нажмите «Назад» ещё раз…" and a second Back within 2.5 s finishes the activity. Returning from
+  any screen restores focus to the card you left (`HomeViewModel.lastFocusKey`, keys `c:`/`w:`/`<row>:`).
 - Quality labels go by **width** (3840×1920 is 4K; height-based labelling showed it as 1080p).
 - NavHost transitions are disabled: a SurfaceView can't fade, leaving the player blinked.
 - The player logs (tag `denopub`) the HLS master's `#EXT-X-MEDIA` lines and the audio tracks vs
