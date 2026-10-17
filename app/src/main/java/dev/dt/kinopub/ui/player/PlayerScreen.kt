@@ -247,7 +247,8 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                             Key.DirectionDown -> { overlay = Overlay.OSD; true }
                             Key.DirectionLeft -> { overlay = Overlay.OSD; scrub(false, repeat); true }
                             Key.DirectionRight -> { overlay = Overlay.OSD; scrub(true, repeat); true }
-                            Key.DirectionCenter, Key.Enter -> { togglePause(); overlay = Overlay.OSD; true }
+                            // Just pause/resume: the full-screen pause sign is enough, no seek bar.
+                            Key.DirectionCenter, Key.Enter -> { togglePause(); true }
                             else -> false
                         }
                     }

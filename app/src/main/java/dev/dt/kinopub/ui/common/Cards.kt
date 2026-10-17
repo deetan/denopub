@@ -121,13 +121,14 @@ fun ContinueCard(
                 ),
             )
             newBadge?.let { Badge(it, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) }
-            Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 8.dp, vertical = 6.dp)) {
                 Text(
                     title, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium, color = K.text,
                 )
                 Text(
                     listOfNotNull(episodeLabel, meta).joinToString(" · "),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelMedium, color = K.muted,
                 )
             }

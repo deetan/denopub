@@ -131,6 +131,7 @@ optimized for "resume what I'm watching in one click". Read in order:
   NONE → ↓ OSD (seek bar with white position marker; ← → scrub with preview, commits ~0.9 s after
   key-up or on OK) → ↓ TRACKS panel (↑ from its top row → OSD). Paused = full-screen dim + ❚❚.
   Player holds the chosen quality (`setForceHighestSupportedBitrate`), ABR used to sit at 1080p.
+- Home is compact: 92dp two-column hero (title | episode · time left · progress), 160dp cards, one-line captions, so 3.5 rows fit. OK in the player only pauses (full-screen ❚❚, no seek bar).
 - **Home Continue = three rows**: Сериалы / Фильмы / Детям, each sorted by `lastActivityMs` =
   max(history last_seen, "Начал смотреть"). **No caps**: every candidate (~60: history +
   subscriptions + unfinished movies) is checked and every row shows all it has — a 40/24 cap

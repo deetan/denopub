@@ -42,6 +42,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -198,7 +199,7 @@ fun HomeScreen(
             // two compact rows — grown-up titles first, kids' (cartoons) second, so a child can
             // find theirs without wading through the rest.
             var focused by remember { mutableStateOf(data.continueWatching.first()) }
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 ContinueHero(focused)
                 @Composable
                 fun card(e: ContinueEntry, first: Boolean) = ContinueCard(
@@ -210,7 +211,7 @@ fun HomeScreen(
                     newBadge = e.newEpisodes.takeIf { it > 0 }?.let { "+$it" },
                     onClick = { onPlay(e.target) },
                     onLongClick = { continueMenu(e) },
-                    width = 200.dp,
+                    width = 160.dp,
                     modifier = Modifier
                         .onFocusChanged { if (it.isFocused) focused = e }
                         .track("c:${e.itemId}")
@@ -226,8 +227,8 @@ fun HomeScreen(
                 ).filter { it.second.isNotEmpty() }
                 rows.forEachIndexed { r, (label, entries) ->
                     Text(
-                        label, style = MaterialTheme.typography.titleMedium, color = K.text,
-                        modifier = Modifier.padding(horizontal = K.screenPadH),
+                        label, style = MaterialTheme.typography.labelMedium, color = K.muted,
+                        modifier = Modifier.padding(horizontal = K.screenPadH, vertical = 0.dp),
                     )
                     LazyRow(
                         state = if (r == 0) continueRow else rememberLazyListState(),
@@ -350,8 +351,8 @@ private fun Section(title: String, badge: String? = null, content: @Composable (
 private fun continueMeta(e: ContinueEntry): String {
     val left = (e.durationSec - e.target.startSec).coerceAtLeast(0)
     return when {
-        e.target.startSec > 0 -> "осталось ${formatMinutes(left)}"
-        e.isSerial -> "следующая серия"
+        e.target.startSec > 0 -> "ещё ${formatMinutes(left)}"
+        e.isSerial -> "след. серия"
         else -> "сначала"
     }
 }
@@ -359,37 +360,38 @@ private fun continueMeta(e: ContinueEntry): String {
 /** Big description of the focused "continue" card: answers "what was this, where am I". */
 @Composable
 private fun ContinueHero(e: ContinueEntry) {
-    Box(Modifier.fillMaxWidth().height(210.dp)) {
-        AsyncImage(
-            e.poster, null,
-            Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.TopCenter,
-        )
+    // Compact, two columns: what it is (left) · where you are (right). ~92dp tall so 3.5
+    // Continue rows fit under it.
+    Box(Modifier.fillMaxWidth().height(92.dp)) {
+        AsyncImage(e.poster, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = Alignment.Center)
         Box(
             Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(0f to K.bg, 0.55f to K.bg.copy(alpha = 0.75f), 1f to Color.Transparent),
+                Brush.horizontalGradient(0f to K.bg, 0.6f to K.bg.copy(alpha = 0.85f), 1f to K.bg.copy(alpha = 0.35f)),
             ),
         )
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to K.bg)))
-        Column(
-            Modifier.align(Alignment.BottomStart).padding(horizontal = K.screenPadH).width(760.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            Modifier.align(Alignment.BottomStart).padding(start = K.screenPadH, end = 200.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.Bottom,
         ) {
             val (ru, original) = splitTitle(e.title)
-            Text(ru, style = MaterialTheme.typography.headlineSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(30f, androidx.compose.ui.unit.TextUnitType.Sp)), color = K.text, maxLines = 1)
-            original?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.muted, maxLines = 1) }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    listOfNotNull(e.episodeLabel, continueMeta(e)).joinToString("  ·  "),
-                    style = MaterialTheme.typography.titleMedium, color = K.text,
-                )
-                if (e.newEpisodes > 0) Badge("+${e.newEpisodes} ${plural(e.newEpisodes, "новая", "новые", "новых")}")
+            Column(Modifier.width(420.dp)) {
+                Text(ru, style = MaterialTheme.typography.headlineSmall, color = K.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                original?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = K.muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
-            if (e.isSerial && e.remainingEpisodes > 1) {
-                Text("ещё ${e.remainingEpisodes} ${plural(e.remainingEpisodes, "серия", "серии", "серий")} впереди", style = MaterialTheme.typography.bodyMedium, color = K.muted)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        listOfNotNull(e.episodeLabel, continueMeta(e)).joinToString("  ·  "),
+                        style = MaterialTheme.typography.bodyMedium, color = K.text, maxLines = 1,
+                    )
+                    if (e.newEpisodes > 0) Badge("+${e.newEpisodes} ${plural(e.newEpisodes, "новая", "новые", "новых")}")
+                }
+                if (e.isSerial && e.remainingEpisodes > 1) {
+                    Text("ещё ${e.remainingEpisodes} ${plural(e.remainingEpisodes, "серия", "серии", "серий")} впереди", style = MaterialTheme.typography.labelMedium, color = K.muted)
+                }
+                ProgressLine(e.progress, Modifier.width(260.dp), height = 3.dp)
             }
-            ProgressLine(e.progress, Modifier.width(320.dp))
         }
     }
 }
