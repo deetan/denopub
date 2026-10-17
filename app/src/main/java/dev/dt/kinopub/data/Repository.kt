@@ -95,7 +95,7 @@ class Repository(
      * Everything in progress, most recently watched first. History gives the order and the
      * last-touched episode; /watching gives exact per-episode status to pick the resume point.
      */
-    suspend fun continueWatching(limit: Int = 24): List<ContinueEntry> = coroutineScope {
+    suspend fun continueWatching(limit: Int = 80): List<ContinueEntry> = coroutineScope {
         // One binge can fill a whole history page, so read two.
         val history = async { api.history(1) + runCatching { api.history(2) }.getOrDefault(emptyList()) }
         val serials = async { api.watchingSerials() }
@@ -124,17 +124,22 @@ class Repository(
         // Kids/adult comes from a persistent cache only, so Home never waits on /items calls;
         // unknown titles are classified afterwards by classifyKids().
         val kids = prefs.kidsFlags()
-        candidates.values.take(40).map { item ->
+        android.util.Log.i("denopub", "continue: ${candidates.size} candidates: " +
+            candidates.values.joinToString { "${it.id}:${it.title.take(16)}" })
+        // All candidates (history + subscriptions + unfinished movies, ~60): capping them cut off
+        // subscriptions without recent history — e.g. a kids' serial — before they were checked.
+        candidates.values.take(limit).map { item ->
             async {
                 runCatching {
                     val info = api.watching(item.id)
                     resumeEntry(item, info, newCounts[item.id] ?: 0)
                         ?.copy(isKids = kids[item.id] == true, lastActivityMs = recency(item.id))
-                }.getOrNull()
+                        .also { if (it == null) android.util.Log.i("denopub", "continue: dropped ${item.id} ${item.title} (nothing to resume)") }
+                }.onFailure { android.util.Log.w("denopub", "continue: failed ${item.id} ${item.title}: ${it.message?.take(200)}") }
+                    .getOrNull()
             }
         }.awaitAll().filterNotNull()
             .sortedByDescending { it.lastActivityMs } // stable: untimed keep candidate order
-            .take(limit)
     }
 
     /** Titles in [entries] not yet classified as kids/adult. */

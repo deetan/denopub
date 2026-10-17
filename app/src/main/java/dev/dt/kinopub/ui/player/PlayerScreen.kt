@@ -4,6 +4,15 @@ import android.app.Application
 import android.view.KeyEvent as AKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,11 +74,12 @@ import kotlinx.coroutines.delay
 
 private enum class Overlay { NONE, FINE, OSD, TRACKS }
 
-/** Fine stepping: a tap = 0.5 s; holding speeds up to 1 s, then 3 s per step. */
-private fun fineStepMs(repeat: Int) = when {
-    repeat < 3 -> 500L
-    repeat < 10 -> 1_000L
-    else -> 3_000L
+/** Fine stepping by how long the key has been held: 0.5 s → 1 s → 2 s → 5 s per step. */
+private fun fineStepMs(heldMs: Long) = when {
+    heldMs < 600 -> 500L
+    heldMs < 1_500 -> 1_000L
+    heldMs < 3_000 -> 2_000L
+    else -> 5_000L
 }
 
 /**
@@ -116,6 +126,13 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     var scrubHint by remember { mutableStateOf<String?>(null) }
     var scrubReleaseTick by remember { mutableIntStateOf(0) }
     var fineLabel by remember { mutableStateOf("0,5 с") }
+    // When the current ← / → hold started: speed grows with hold time, not with press count.
+    var holdStart by remember { mutableLongStateOf(0L) }
+    fun held(repeat: Int): Long {
+        val now = System.currentTimeMillis()
+        if (repeat == 0) holdStart = now
+        return now - holdStart
+    }
     var panelHasFocus by remember { mutableStateOf(false) }
     var panelFocusTick by remember { mutableIntStateOf(0) }
 
@@ -128,7 +145,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
         cancelScrub()
     }
     fun scrub(forward: Boolean, repeat: Int) {
-        val step = seekStepMs(repeat)
+        val step = seekStepMs(held(repeat))
         val next = ((scrubMs ?: pos) + if (forward) step else -step).coerceIn(0, maxOf(dur, 0))
         scrubMs = next
         scrubHint = (if (forward) "+" else "−") + stepLabel(step)
@@ -137,7 +154,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     fun fine(forward: Boolean, repeat: Int) {
         if (vm.player.isPlaying) vm.player.pause()
         vm.player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
-        val step = fineStepMs(repeat)
+        val step = fineStepMs(held(repeat))
         fineLabel = (if (forward) "+" else "−") + stepLabelFine(step)
         vm.player.seekTo((vm.player.currentPosition + if (forward) step else -step).coerceIn(0, maxOf(dur, 0)))
     }
@@ -255,7 +272,10 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
         )
 
         // Paused: dim the picture and show a big pause sign (not while stepping frames).
-        if (!playing && overlay != Overlay.FINE && ui.error == null) {
+        AnimatedVisibility(
+            visible = !playing && overlay != Overlay.FINE && ui.error == null,
+            enter = fadeIn(tween(180)), exit = fadeOut(tween(180)),
+        ) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
                 Text("❚❚", fontSize = 120.sp, color = Color.White.copy(alpha = 0.9f))
             }
@@ -265,9 +285,14 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             Text("Ошибка воспроизведения: $it", color = K.badge, modifier = Modifier.align(Alignment.Center))
         }
 
-        if (overlay == Overlay.FINE) {
+        AnimatedVisibility(
+            visible = overlay == Overlay.FINE,
+            enter = slideInVertically(tween(220)) { -it } + fadeIn(tween(220)),
+            exit = slideOutVertically(tween(180)) { -it } + fadeOut(tween(180)),
+            modifier = Modifier.align(Alignment.TopStart),
+        ) {
             Column(
-                Modifier.align(Alignment.TopStart).fillMaxWidth()
+                Modifier.fillMaxWidth()
                     .background(Color.Black.copy(alpha = 0.55f))
                     .padding(horizontal = K.screenPadH, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -276,18 +301,23 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Text(clockMs(pos), style = MaterialTheme.typography.titleMedium, color = K.accent)
                     Text(
-                        "покадрово: ← → по 0,5 с (удерживайте — быстрее) $fineLabel  ·  OK пауза  ·  ↑ скрыть",
+                        "покадрово: ← → по 0,5 с, удерживайте — быстрее ($fineLabel)  ·  OK пауза  ·  ↑ скрыть",
                         style = MaterialTheme.typography.labelMedium, color = K.muted,
                     )
                 }
             }
         }
 
-        if (overlay == Overlay.OSD || overlay == Overlay.TRACKS) {
+        AnimatedVisibility(
+            visible = overlay == Overlay.OSD || overlay == Overlay.TRACKS,
+            enter = slideInVertically(tween(240)) { it } + fadeIn(tween(240)),
+            exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(200)),
+            modifier = Modifier.align(Alignment.BottomStart),
+        ) {
             Column(
                 Modifier
-                    .align(Alignment.BottomStart)
                     .fillMaxWidth()
+                    .animateContentSize(tween(220))
                     .background(Color.Black.copy(alpha = 0.6f))
                     .padding(horizontal = K.screenPadH, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -324,7 +354,11 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     )
                     if (stats.isNotEmpty()) Text(stats, style = MaterialTheme.typography.labelMedium, color = K.muted.copy(alpha = 0.8f))
                 }
-                if (overlay == Overlay.TRACKS) {
+                AnimatedVisibility(
+                    visible = overlay == Overlay.TRACKS,
+                    enter = expandVertically(tween(240), expandFrom = Alignment.Top) + fadeIn(tween(240)),
+                    exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top) + fadeOut(tween(160)),
+                ) {
                     TracksPanel(vm, ui, panelFocusTick, onFocusInside = { panelHasFocus = it }, onExitUp = { overlay = Overlay.OSD })
                 }
             }
@@ -354,12 +388,13 @@ private fun clockMs(ms: Long): String {
     return clock(ms) + ",$tenths"
 }
 
-/** Accelerating step while a seek key is held (repeatCount from the key event). */
-private fun seekStepMs(repeat: Int): Long = when {
-    repeat < 4 -> 10_000L
-    repeat < 12 -> 30_000L
-    repeat < 24 -> 60_000L
-    else -> 120_000L
+/** Scrub step by hold time: 10 s → 30 s → 1 min → 2 min → 5 min. */
+private fun seekStepMs(heldMs: Long): Long = when {
+    heldMs < 600 -> 10_000L
+    heldMs < 1_500 -> 30_000L
+    heldMs < 3_000 -> 60_000L
+    heldMs < 5_000 -> 120_000L
+    else -> 300_000L
 }
 
 private fun stepLabel(ms: Long): String = if (ms >= 60_000) "${ms / 60_000} мин" else "${ms / 1000} с"

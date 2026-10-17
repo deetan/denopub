@@ -130,7 +130,12 @@ optimized for "resume what I'm watching in one click". Read in order:
   key-up or on OK) → ↓ TRACKS panel (↑ from its top row → OSD). Paused = full-screen dim + ❚❚.
   Player holds the chosen quality (`setForceHighestSupportedBitrate`), ABR used to sit at 1080p.
 - **Home Continue = three rows**: Сериалы / Фильмы / Детям, each sorted by `lastActivityMs` =
-  max(history last_seen, "Начал смотреть"). Up to 24 titles from 40 candidates.
+  max(history last_seen, "Начал смотреть"). **No caps**: every candidate (~60: history +
+  subscriptions + unfinished movies) is checked and every row shows all it has — a 40/24 cap
+  silently dropped subscribed serials without recent history (Peppa, 2026-10-17). Diagnostics:
+  `adb logcat -s denopub | grep continue:` lists candidates and why each one was dropped.
+- Player overlays animate (slide from top/bottom, panel expands); scrub and fine steps accelerate by
+  **hold time** (scrub 10 s→30 s→1 min→2 min→5 min, fine 0.5→1→2→5 s).
 - **Title card**: Russian plot (kino.pub) + English plot and trailers/teasers from IMDb
   (`data/api/ImdbClient.kt`, unofficial GraphQL `caching.graphql.imdb.com`; imdb.com HTML is behind
   an anti-bot wall) + kino.pub trailer (`items/trailer`). Trailers play in `TrailerScreen`.
