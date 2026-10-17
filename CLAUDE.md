@@ -79,7 +79,14 @@ optimized for "resume what I'm watching in one click". Read in order:
     so TV power-on lands on the Chromecast.
   - `system/WatchNext.kt` — mirrors Continue into the system Watch Next row after each Home load;
     tiles open `denopub://play?id&season&episode&start` → `AppContainer.pendingPlay` → player.
-    Google TV may not display rows from sideloaded apps (unverified).
+    **Verified 2026-10-17: Google TV does NOT show them.** Rows are accepted (`watch next synced: 9`)
+    but filtered; the Continue watching row only shows allow-listed partner apps ("Your services"
+    lists only catalog partners). The Engage SDK continuation cluster was tried too:
+    `isServiceAvailable` → `false` for this sideloaded app (enrollment/Play distribution needed), so
+    it was removed. Kept Watch Next (harmless; would light up if Google ever relaxes the filter).
+    Google TV has no home-screen widgets; the only surface we own there is the app tile.
+  - `WakeService` exists but the owner chose NOT to auto-open on power-on (2026-10-17); it stays
+    inert unless enabled in Accessibility settings.
 
 ## Conventions
 
