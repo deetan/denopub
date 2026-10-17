@@ -15,7 +15,10 @@ data class HomeState(
     val message: String? = null,   // short confirmation after an action
 )
 
-class HomeViewModel(private val repo: Repository) : ViewModel() {
+class HomeViewModel(
+    private val repo: Repository,
+    private val watchNext: dev.dt.kinopub.system.WatchNext? = null,
+) : ViewModel() {
     // Start from the on-disk copy of the last Home: instant launch, fresh data replaces it.
     /** Key of the last focused card ("c:<id>", "w:<id>", "<row>:<id>"), to restore on return. */
     var lastFocusKey: String? = null
@@ -33,6 +36,9 @@ class HomeViewModel(private val repo: Repository) : ViewModel() {
                 { _state.value.copy(loading = false, error = it.message) },
             )
             classifyNewTitles()
+            _state.value.data?.let { d ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { watchNext?.sync(d.continueWatching) }
+            }
         }
     }
 

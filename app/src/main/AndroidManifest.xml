@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Watch Next ("Continue watching" on the Google TV home). -->
+    <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
     <!-- TV-only app: no touchscreen, leanback launcher. -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -23,11 +26,33 @@
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.Kinopub.Splash">
+            <!-- Deep links from the Google TV "Continue watching" row: denopub://play?id=…&season=…&episode=…&start=… -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="denopub" android:host="play" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Opens denopub when the dongle wakes with the TV (accessibility services may start
+             activities from the background on Android 14; a plain receiver may not). -->
+        <service
+            android:name=".system.WakeService"
+            android:exported="false"
+            android:label="@string/wake_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/wake_service" />
+        </service>
     </application>
 </manifest>

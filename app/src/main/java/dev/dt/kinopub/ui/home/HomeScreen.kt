@@ -79,7 +79,7 @@ fun HomeScreen(
     onOpen: (Long) -> Unit,
     onSearch: () -> Unit,
 ) {
-    val vm: HomeViewModel = viewModel(factory = viewModelFactory { initializer { HomeViewModel(c.repository) } })
+    val vm: HomeViewModel = viewModel(factory = viewModelFactory { initializer { HomeViewModel(c.repository, c.watchNext) } })
     remember { vm.refresh() } // once per visit, before the first read of state
     val state by vm.state.collectAsState()
 

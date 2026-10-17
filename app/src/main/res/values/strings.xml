@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">denopub</string>
+    <string name="wake_service_label">denopub: открывать при включении ТВ</string>
+    <string name="wake_service_description">Когда телевизор включается и на экране главная Google TV, denopub сразу открывается на «Продолжить». Сервис видит только то, какое приложение сейчас на экране.</string>
 </resources>

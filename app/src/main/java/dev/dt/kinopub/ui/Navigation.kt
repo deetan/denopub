@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
@@ -40,6 +41,15 @@ fun KinoNavHost(c: AppContainer) {
     // Decide the start screen once, after DataStore has loaded.
     val loggedIn by produceState<Boolean?>(null) { value = c.tokens.current() != null }
     val ready by c.uiReady.collectAsState()
+    val pendingPlay by c.pendingPlay.collectAsState()
+    // Deep link from the system Continue watching row: straight into the player, Home underneath.
+    LaunchedEffect(pendingPlay, loggedIn) {
+        val t = pendingPlay ?: return@LaunchedEffect
+        if (loggedIn != true) return@LaunchedEffect
+        c.pendingPlay.value = null
+        c.uiReady.value = true
+        runCatching { nav.navigate(Routes.player(t)) }
+    }
     Box(Modifier.fillMaxSize().background(K.bg)) {
         val start = loggedIn
         // No fade transitions: a SurfaceView video can't fade, so leaving the player blinked.

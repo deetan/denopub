@@ -29,6 +29,11 @@ Every option is visible at once, so there are no lists to scroll. Your picks are
 serial and applied to the next episode automatically. Playback asks kino.pub for HEVC, 4K, and HDR
 streams, and uses a SurfaceView so HDR10 and Dolby Vision reach the TV.
 
+**Google TV integration:** with the TV set to start on the dongle's input, denopub opens by itself
+when the TV is switched on (enable *Settings → System → Accessibility → denopub* once on the
+dongle). Titles in progress are also pushed to the system "Continue watching" row and resume from
+there.
+
 Wireframes: see [`docs/design-prompt.md`](docs/design-prompt.md). That file is also the prompt to
 use for visual polish.
 

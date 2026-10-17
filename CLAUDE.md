@@ -70,6 +70,17 @@ optimized for "resume what I'm watching in one click". Read in order:
 - Home is cached on disk (`filesDir/home.json`) and rendered instantly on launch; fresh data
   replaces it, and focus jumps back to the first card only if the user hasn't moved yet.
 
+- **Google TV integration (option 2, 2026-10-17):**
+  - `system/WakeService.kt` — AccessibilityService. On `SCREEN_ON` (dongle woken by the TV over
+    CEC) it waits 2 s and, if the Google TV launcher/ambient is in front, starts `MainActivity`.
+    An accessibility service is used because Android 14 blocks background activity starts for
+    plain receivers. The user enables it once: Settings → System → Accessibility → denopub.
+    Owner's setup: Hisense VIDAA "Default Startup Page = Last Accessed Source" + CEC on both sides,
+    so TV power-on lands on the Chromecast.
+  - `system/WatchNext.kt` — mirrors Continue into the system Watch Next row after each Home load;
+    tiles open `denopub://play?id&season&episode&start` → `AppContainer.pendingPlay` → player.
+    Google TV may not display rows from sideloaded apps (unverified).
+
 ## Conventions
 
 - Manual DI via `AppContainer`; no Hilt. Hand-written OkHttp client; no Retrofit.

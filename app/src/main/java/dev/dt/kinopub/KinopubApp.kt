@@ -46,6 +46,11 @@ class AppContainer(app: Application) {
     val repository = Repository(api, prefs, app.filesDir)
     val registration = DeviceRegistration(api)
 
+    val watchNext = dev.dt.kinopub.system.WatchNext(app)
+
+    /** A "resume this" request from a deep link (Google TV Continue watching row). */
+    val pendingPlay = kotlinx.coroutines.flow.MutableStateFlow<dev.dt.kinopub.data.ResumeTarget?>(null)
+
     /** Splash stays up until the first real screen has content (Home data or the login code). */
     val uiReady = kotlinx.coroutines.flow.MutableStateFlow(false)
 }
