@@ -65,7 +65,7 @@ class LocalPrefs(private val context: Context) {
 
     private val kStarted = stringSetPreferencesKey("started_at") // "id:epochMs"
 
-    /** Titles the user explicitly started ("Начал смотреть") and when — they lead Continue. */
+    /** Last local activity per title: "Начал смотреть" or starting playback here. Sort key for Continue. */
     suspend fun startedAt(): Map<Long, Long> =
         context.localStore.data.first()[kStarted].orEmpty().mapNotNull {
             val (id, ts) = it.split(':').takeIf { p -> p.size == 2 } ?: return@mapNotNull null

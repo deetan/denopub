@@ -111,6 +111,9 @@ class PlayerController(
                 val it = c.repository.item(start.itemId)
                 item = it
                 choice = c.prefs.trackChoice(it.id) ?: TrackChoice()
+                // Playing counts as activity: the title jumps to the front of its Continue row,
+                // even before (or without) kino.pub updating its history.
+                c.appScope.launch { c.prefs.markStarted(it.id, true) }
                 load(start)
             }.onFailure { _ui.value = _ui.value.copy(error = it.message) }
         }

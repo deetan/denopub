@@ -85,6 +85,8 @@ optimized for "resume what I'm watching in one click". Read in order:
     `isServiceAvailable` → `false` for this sideloaded app (enrollment/Play distribution needed), so
     it was removed. Kept Watch Next (harmless; would light up if Google ever relaxes the filter).
     Google TV has no home-screen widgets; the only surface we own there is the app tile.
+  - Starting playback also stamps `LocalPrefs.startedAt`, so whatever was just watched here leads
+    its Continue row even if kino.pub history lags (Peppa had no history entry).
   - `WakeService` exists but the owner chose NOT to auto-open on power-on (2026-10-17); it stays
     inert unless enabled in Accessibility settings.
 
