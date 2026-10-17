@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Splash icon: amber rounded square with a play triangle. 288×288 canvas; content stays
-     inside the 192dp circle Android 12+ keeps visible. Placeholder until the real mark (docs/brand-prompts.md). -->
+<!-- denopub mark ("d" with a play triangle in the bowl), from docs/brand/splash-icon-amber.svg.
+     1152 viewport = 288dp splash canvas; the mark sits inside the 192dp safe circle.
+     The triangle winds opposite to the bowl, so nonZero fill cuts it out. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="288dp" android:height="288dp"
-    android:viewportWidth="288" android:viewportHeight="288">
-    <path android:fillColor="#F2B33D"
-        android:pathData="M120,84 L168,84 A36,36 0 0 1 204,120 L204,168 A36,36 0 0 1 168,204 L120,204 A36,36 0 0 1 84,168 L84,120 A36,36 0 0 1 120,84 Z" />
-    <path android:fillColor="#0E0F12"
-        android:pathData="M127,113 L127,175 L177,144 Z" />
+    android:viewportWidth="1152" android:viewportHeight="1152">
+    <group android:translateX="247" android:translateY="226" android:scaleX="7" android:scaleY="7">
+        <path
+            android:fillColor="#F2B33D"
+            android:strokeColor="#F2B33D"
+            android:strokeWidth="4"
+            android:strokeLineJoin="round"
+            android:pathData="M14,58 A30,30 0 1 1 74,58 A30,30 0 1 1 14,58 Z M62,21 a9,9 0 0 1 18,0 v58 a9,9 0 0 1 -18,0 Z M31,44 L31,72 L55,58 Z" />
+    </group>
 </vector>

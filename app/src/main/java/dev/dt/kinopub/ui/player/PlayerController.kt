@@ -154,6 +154,14 @@ class PlayerController(
             .setSubtitleConfigurations(subs)
             .build()
 
+        c.appScope.launch {
+            runCatching {
+                c.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { r ->
+                    val lines = r.body?.string().orEmpty().lines().filter { l -> l.startsWith("#EXT-X-MEDIA") || l.startsWith("#EXT-X-STREAM-INF") }
+                    android.util.Log.i("denopub", "manifest ${lines.size} lines\n" + lines.take(40).joinToString("\n"))
+                }
+            }
+        }
         player.setMediaItem(mediaItem, positionMs)
         player.prepare()
         player.playWhenReady = true
@@ -231,7 +239,17 @@ class PlayerController(
 
     private fun meta(i: Int): AudioTrack? = video?.audios?.sortedBy { it.index }?.getOrNull(i)
 
+    private fun logTracks(tag: String) {
+        val lines = audioTracks().mapIndexed { i, (g, t, f) ->
+            val m = meta(i)
+            "a$i sel=${g.isTrackSelected(t)} id=${f.id} label=${f.label} lang=${f.language} ch=${f.channelCount} " +
+                "mime=${f.sampleMimeType} | kp[${m?.index}]=${m?.author?.title}/${m?.type?.title}/${m?.lang}"
+        }
+        android.util.Log.i("denopub", "$tag audio groups=${player.currentTracks.groups.count { it.type == C.TRACK_TYPE_AUDIO }}\n" + lines.joinToString("\n"))
+    }
+
     private fun publishTracks() {
+        logTracks("tracks")
         val audio = audioTracks().mapIndexed { i, (g, t, f) ->
             val m = meta(i)
             TrackOption(
@@ -250,14 +268,21 @@ class PlayerController(
         val text = textTracks()
         val subsOn = text.any { (g, t, _) -> g.isTrackSelected(t) }
         val subs = listOf(TrackOption("s-off", "Выкл", null, selected = !subsOn)) +
-            text.mapIndexed { i, (g, t, f) ->
-                TrackOption("s$i", subtitleName(f.label ?: f.language ?: "Субтитры ${i + 1}"), null, g.isTrackSelected(t))
+            run {
+                val seen = mutableMapOf<String, Int>()
+                text.mapIndexed { i, (g, t, f) ->
+                    val name = subtitleName(f.label ?: f.language ?: "Субтитры ${i + 1}")
+                    val n = (seen[name] ?: 0) + 1
+                    seen[name] = n
+                    TrackOption("s$i", if (n > 1) "$name $n" else name, null, g.isTrackSelected(t))
+                }
             }
         _ui.value = _ui.value.copy(audio = audio, subtitles = subs)
     }
 
     fun selectAudio(index: Int, remember: Boolean = true) {
         val (g, t, f) = audioTracks().getOrNull(index) ?: return
+        android.util.Log.i("denopub", "selectAudio $index -> id=${f.id} label=${f.label} lang=${f.language}")
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, t))
             .build()
@@ -339,11 +364,45 @@ class PlayerController(
             val f = files.filter { it.h == h }.maxBy { if (it.codec == "h265") 1 else 0 }
             TrackOption(
                 key = "q$h",
-                label = qualityLabel(h),
+                label = qualityLabel(f),
                 detail = f.codec?.uppercase(),
                 selected = h == selected.h,
             )
         }
+
+    private val bandwidth = androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(app)
+
+    /** One-line playback stats for the OSD, like the original kino.pub player shows. */
+    fun stats(): String {
+        val v = player.videoFormat
+        val parts = mutableListOf<String>()
+        if (v != null && v.width > 0) {
+            parts += "${v.width}×${v.height}" + (if (v.frameRate > 0) " ${"%.0f".format(v.frameRate)}fps" else "")
+            val codec = when {
+                v.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION -> "Dolby Vision"
+                v.sampleMimeType == MimeTypes.VIDEO_H265 -> "HEVC"
+                v.sampleMimeType == MimeTypes.VIDEO_H264 -> "AVC"
+                else -> v.sampleMimeType?.substringAfter('/')?.uppercase()
+            }
+            val hdr = when (v.colorInfo?.colorTransfer) {
+                C.COLOR_TRANSFER_ST2084 -> "HDR10"
+                C.COLOR_TRANSFER_HLG -> "HLG"
+                else -> null
+            }
+            parts += listOfNotNull(codec, hdr).joinToString(" ")
+            val br = maxOf(v.bitrate, v.peakBitrate, v.averageBitrate)
+            if (br > 0) parts += "поток %.1f Мбит/с".format(br / 1e6)
+        }
+        val net = bandwidth.bitrateEstimate
+        if (net > 0) parts += "сеть %.0f Мбит/с".format(net / 1e6)
+        val buf = (player.bufferedPosition - player.currentPosition).coerceAtLeast(0) / 1000
+        parts += "буфер ${buf} с"
+        player.audioFormat?.let { a ->
+            listOfNotNull(a.sampleMimeType?.substringAfter('/')?.uppercase(), channelsLabel(a.channelCount))
+                .joinToString(" ").takeIf { it.isNotBlank() }?.let { parts += "звук $it" }
+        }
+        return parts.filter { it.isNotBlank() }.joinToString("  ·  ")
+    }
 
     override fun onCleared() {
         saveProgress()
@@ -372,11 +431,13 @@ class PlayerController(
             else -> "${ch}ch"
         }
 
-        fun qualityLabel(h: Int): String = when {
-            h >= 2000 -> "4K"
-            h >= 1000 -> "1080p"
-            h >= 700 -> "720p"
-            else -> "${h}p"
+        /** By width: wide films are 3840×1600 etc., so height alone mislabels 4K as 1080p. */
+        fun qualityLabel(f: MediaFile): String = when {
+            f.w >= 3200 || f.h >= 2000 -> "4K"
+            f.w >= 1800 || f.h >= 1000 -> "1080p"
+            f.w >= 1200 || f.h >= 700 -> "720p"
+            f.w > 0 -> "${f.h}p"
+            else -> f.quality ?: "${f.h}p"
         }
     }
 }

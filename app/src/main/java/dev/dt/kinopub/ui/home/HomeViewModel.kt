@@ -16,7 +16,8 @@ data class HomeState(
 )
 
 class HomeViewModel(private val repo: Repository) : ViewModel() {
-    private val _state = MutableStateFlow(HomeState())
+    // Start from the on-disk copy of the last Home: instant launch, fresh data replaces it.
+    private val _state = MutableStateFlow(HomeState(data = repo.cachedHome()))
     val state: StateFlow<HomeState> = _state
 
     /** Called every time Home becomes visible: progress changes after each playback. */

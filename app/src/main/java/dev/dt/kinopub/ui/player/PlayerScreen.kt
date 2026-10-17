@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -86,12 +87,26 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
         onDispose { view.keepScreenOn = false; vm.saveProgress() }
     }
     // OSD auto-hides; the tracks panel stays until Back so you can read it.
+    // Outside the tracks panel the root owns focus, so the D-pad always works — including the
+    // first seconds with the OSD up and right after the panel closes (its chips took focus with them).
+    LaunchedEffect(overlay) {
+        if (overlay != Overlay.TRACKS) repeat(10) {
+            if (runCatching { rootFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            delay(30)
+        }
+    }
     LaunchedEffect(overlay, lastInput) {
         if (overlay == Overlay.OSD) {
             delay(4_000)
             if (vm.player.isPlaying) overlay = Overlay.NONE
         }
-        if (overlay == Overlay.NONE) runCatching { rootFocus.requestFocus() }
+    }
+    var seekHint by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(seekHint, lastInput) { if (seekHint != null) { delay(1_200); seekHint = null } }
+    fun seek(forward: Boolean) {
+        if (forward) vm.player.seekForward() else vm.player.seekBack()
+        seekHint = if (forward) "+10 с" else "−10 с"
+        overlay = if (overlay == Overlay.TRACKS) Overlay.TRACKS else Overlay.OSD
     }
 
     BackHandler {
@@ -121,8 +136,8 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     }
                     Key.MediaPlay -> { vm.player.play(); true }
                     Key.MediaPause -> { vm.player.pause(); overlay = Overlay.OSD; true }
-                    Key.DirectionLeft, Key.MediaRewind -> { vm.player.seekBack(); overlay = Overlay.OSD; true }
-                    Key.DirectionRight, Key.MediaFastForward -> { vm.player.seekForward(); overlay = Overlay.OSD; true }
+                    Key.DirectionLeft, Key.MediaRewind -> { seek(forward = false); true }
+                    Key.DirectionRight, Key.MediaFastForward -> { seek(forward = true); true }
                     Key.DirectionDown -> { overlay = Overlay.TRACKS; true }
                     Key.DirectionUp -> { overlay = Overlay.OSD; true }
                     else -> false
@@ -134,6 +149,11 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                 // PlayerView defaults to SurfaceView: required for HDR/Dolby Vision output.
                 PlayerView(ctx).apply {
                     useController = false
+                    // PlayerView handles D-pad itself and could steal focus from the Compose root,
+                    // which made ↓ / ← / → randomly do nothing on the TV.
+                    isFocusable = false
+                    isFocusableInTouchMode = false
+                    descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     keepScreenOn = true
                     player = vm.player
@@ -155,21 +175,29 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     .padding(horizontal = K.screenPadH, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Osd(vm, ui)
+                Osd(vm, ui, seekHint, seekable = overlay == Overlay.TRACKS, onSeek = ::seek)
                 if (overlay == Overlay.TRACKS) TracksPanel(vm, ui)
             }
         }
     }
 }
 
+/**
+ * Title, seek bar, times and a stats line (resolution · codec/HDR · stream bitrate · network ·
+ * buffer). With the tracks panel open the seek bar is focusable (↑ from the first chip row) and
+ * ← / → on it seek ±10 s; otherwise ← / → seek from anywhere.
+ */
 @Composable
-private fun Osd(vm: PlayerController, ui: PlayerUi) {
+private fun Osd(vm: PlayerController, ui: PlayerUi, seekHint: String?, seekable: Boolean, onSeek: (Boolean) -> Unit) {
     var pos by remember { mutableLongStateOf(0L) }
     var dur by remember { mutableLongStateOf(0L) }
+    var stats by remember { mutableStateOf("") }
+    var barFocused by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         while (true) {
             pos = vm.player.currentPosition
             dur = vm.player.duration.coerceAtLeast(0)
+            stats = vm.stats()
             delay(500)
         }
     }
@@ -177,11 +205,36 @@ private fun Osd(vm: PlayerController, ui: PlayerUi) {
         Text(ui.title, style = MaterialTheme.typography.headlineSmall, color = K.text)
         ui.episodeLabel?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.muted) }
     }
-    ProgressLine(if (dur > 0) pos.toFloat() / dur else 0f)
-    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .then(
+                if (seekable) Modifier
+                    .onFocusChanged { barFocused = it.isFocused }
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (e.key) {
+                            Key.DirectionLeft -> { onSeek(false); true }
+                            Key.DirectionRight -> { onSeek(true); true }
+                            Key.DirectionCenter, Key.Enter -> {
+                                if (vm.player.isPlaying) vm.player.pause() else vm.player.play(); true
+                            }
+                            else -> false
+                        }
+                    }
+                    .focusable()
+                else Modifier,
+            ),
+    ) {
+        ProgressLine(if (dur > 0) pos.toFloat() / dur else 0f, height = if (barFocused) 8.dp else 4.dp)
+    }
+    Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(clock(pos), style = MaterialTheme.typography.labelMedium, color = K.muted)
+        seekHint?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.accent) }
         Text("−" + clock((dur - pos).coerceAtLeast(0)), style = MaterialTheme.typography.labelMedium, color = K.muted)
     }
+    if (stats.isNotEmpty()) Text(stats, style = MaterialTheme.typography.labelMedium, color = K.muted)
 }
 
 /**
@@ -217,11 +270,13 @@ private fun TrackRow(
     val selectedIndex = options.indexOfFirst { it.selected }.coerceAtLeast(0)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.labelMedium, color = K.muted, modifier = Modifier.width(96.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 24.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)) {
             itemsIndexed(options, key = { _, o -> o.key }) { i, o ->
                 FilterChip(
                     selected = o.selected,
                     onClick = { onPick(i, o) },
+                    // No zoom on focus: scaled chips overlapped their neighbours on the TV.
+                    scale = FilterChipDefaults.scale(focusedScale = 1f),
                     colors = FilterChipDefaults.colors(
                         containerColor = Color.Transparent,
                         contentColor = K.muted,

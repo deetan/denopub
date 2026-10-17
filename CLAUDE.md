@@ -63,7 +63,12 @@ optimized for "resume what I'm watching in one click". Read in order:
 - Splash: `ui/SplashOverlay.kt` (Compose) shows the mark until `AppContainer.uiReady` (Home data or
   login code), max 5 s. The system splash (`Theme.Kinopub.Splash`) only bridges process start —
   the Android TV image doesn't draw its icon, so never hold it with `setKeepOnScreenCondition`.
-- Brand art is a placeholder; prompts for the real one are in `docs/brand-prompts.md`.
+- Brand art (2026-10-16, from Claude Design): sources in `docs/brand/` (SVG mark, banner, icon);
+  resources: `drawable-{xhdpi,xxhdpi}/banner.png`, `mipmap-*/ic_launcher.png`,
+  `drawable-nodpi/splash_screen.jpg` (full-frame splash used by `SplashOverlay`),
+  `drawable/splash_mark.xml` (vector of the mark for the system splash). Prompts: `docs/brand-prompts.md`.
+- Home is cached on disk (`filesDir/home.json`) and rendered instantly on launch; fresh data
+  replaces it, and focus jumps back to the first card only if the user hasn't moved yet.
 
 ## Conventions
 
@@ -95,6 +100,16 @@ optimized for "resume what I'm watching in one click". Read in order:
   item. `ActionMenu` swallows OK until a fresh key-down (repeatCount == 0). Keep that guard.
 - `BasicTextField` swallows the D-pad on TV — Search moves focus out on ↓ manually.
 - Player Back: closes the tracks panel; otherwise exits immediately (OSD is not modal).
+- **PlayerView must be non-focusable** (`isFocusable=false`, `FOCUS_BLOCK_DESCENDANTS`): it eats
+  D-pad keys otherwise, so ↓ "sometimes" didn't open the panel on the real TV. The Compose root
+  re-requests focus on every overlay change except the tracks panel.
+- Quality labels go by **width** (3840×1920 is 4K; height-based labelling showed it as 1080p).
+- NavHost transitions are disabled: a SurfaceView can't fade, leaving the player blinked.
+- The player logs (tag `denopub`) the HLS master's `#EXT-X-MEDIA` lines and the audio tracks vs
+  kino.pub `audios[]` — added to debug voiceover switching (open as of 2026-10-17).
+- Real TV: Chromecast "Living Room TV", Android 14, wireless debugging at 192.168.1.106 (connect
+  port changes; `tv.sh` rediscovers it via mDNS). Check `dumpsys audio | grep state:started`
+  before deploying — an install kills playback.
 - **Testing on the emulator uses the owner's real kino.pub account.** Never drive "mark watched" /
   "remove" flows blind with adb — screenshot before every OK. (2026-10-16: a blind key sequence
   marked a whole season watched; it was restored via the app.)

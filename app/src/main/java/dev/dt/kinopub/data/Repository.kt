@@ -10,6 +10,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 
 /** Where to start playback: one tap on a home card goes straight here. */
+@kotlinx.serialization.Serializable
 data class ResumeTarget(
     val itemId: Long,
     val season: Int?,          // null for movies
@@ -17,6 +18,7 @@ data class ResumeTarget(
     val startSec: Int,
 )
 
+@kotlinx.serialization.Serializable
 data class ContinueEntry(
     val itemId: Long,
     val title: String,
@@ -33,8 +35,10 @@ data class ContinueEntry(
     val progress: Float get() = if (durationSec > 0) target.startSec.toFloat() / durationSec else 0f
 }
 
+@kotlinx.serialization.Serializable
 data class WishlistEntry(val item: Item, val isNew: Boolean)
 
+@kotlinx.serialization.Serializable
 data class HomeData(
     val continueWatching: List<ContinueEntry>,   // all, most recent first
     val wishlist: List<WishlistEntry>,
@@ -59,7 +63,20 @@ fun isKidsContent(item: Item): Boolean = item.genres.any { g ->
 class Repository(
     private val api: KinopubApi,
     private val prefs: LocalPrefs,
+    private val cacheDir: java.io.File,
 ) {
+    private val cacheJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private val homeCache get() = java.io.File(cacheDir, "home.json")
+
+    /** Last Home shown, so launch can render instantly while the network catches up. */
+    fun cachedHome(): HomeData? = runCatching {
+        cacheJson.decodeFromString(HomeData.serializer(), homeCache.readText())
+    }.getOrNull()
+
+    private fun saveHome(d: HomeData) {
+        runCatching { homeCache.writeText(cacheJson.encodeToString(HomeData.serializer(), d)) }
+    }
+
     private var wishlistFolderId: Long? = null
 
     suspend fun home(): HomeData = coroutineScope {
@@ -68,7 +85,7 @@ class Repository(
         val fm = async { runCatching { api.fresh("movie").items }.getOrDefault(emptyList()) }
         val fs = async { runCatching { api.fresh("serial").items }.getOrDefault(emptyList()) }
         val hot = async { runCatching { api.hot("movie").items }.getOrDefault(emptyList()) }
-        HomeData(cont.await(), wish.await(), fm.await(), fs.await(), hot.await())
+        HomeData(cont.await(), wish.await(), fm.await(), fs.await(), hot.await()).also(::saveHome)
     }
 
     /**

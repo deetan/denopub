@@ -128,10 +128,11 @@ fun HomeScreen(
 
     val continueRow = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val column = rememberLazyListState()
-    LaunchedEffect(state.loading) {
-        // Wait for the fresh load (order changes after every playback), then put focus on the
-        // first "continue" card. Lazy rows compose a frame late, so retry briefly.
-        if (state.loading || focusedOnce) return@LaunchedEffect
+    // Focus the first card as soon as anything is on screen (cached data), and again when the
+    // fresh load lands — unless the user has already started moving around.
+    var userMoved by remember { mutableStateOf(false) }
+    LaunchedEffect(state.loading, data != null) {
+        if (data == null || (focusedOnce && (userMoved || state.loading))) return@LaunchedEffect
         column.scrollToItem(0)
         continueRow.scrollToItem(0)
         repeat(20) {
@@ -142,6 +143,7 @@ fun HomeScreen(
 
     Box(
         Modifier.fillMaxSize().onPreviewKeyEvent {
+            if (it.type == KeyEventType.KeyDown) userMoved = true
             if (it.type == KeyEventType.KeyDown && it.key == Key.Search) { onSearch(); true } else false
         },
     ) {
@@ -239,7 +241,19 @@ fun HomeScreen(
         // Always-visible search entry, top-right; ↑ from the first row reaches it.
         OutlinedButton(
             onClick = onSearch,
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = K.screenPadV, end = K.screenPadH),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = K.screenPadV, end = K.screenPadH)
+                // The button floats over the hero with no focusable neighbours, so the default
+                // focus search can get stuck here. ↓ / ← always go back to the first card.
+                .onPreviewKeyEvent {
+                    if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (it.key) {
+                        Key.DirectionDown, Key.DirectionLeft, Key.Back ->
+                            runCatching { firstFocus.requestFocus() }.isSuccess
+                        else -> false
+                    }
+                },
         ) { Text("Поиск") }
         state.message?.let {
             Text(

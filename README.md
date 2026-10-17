@@ -101,9 +101,11 @@ Then, from the Mac:
 scripts/tv.sh connect 192.168.1.50
 ```
 
-The first connect shows an "Allow debugging?" prompt on the TV. Choose **Always allow**. If your
-build only offers *Wireless debugging* with a pairing code, run
-`scripts/tv.sh pair <ip:pair-port> <code>` first, then connect to the port it shows.
+Chromecast with Google TV (Android 14) uses **Wireless debugging**: on the TV open Developer
+options → Wireless debugging → *Pair device with pairing code*, then run
+`scripts/tv.sh pair <ip:pair-port> <code>` once. The connect port changes after every reboot;
+`scripts/tv.sh deploy` rediscovers it via mDNS, so no reconnecting by hand. (Owner's TV:
+"Living Room TV", 192.168.1.106.)
 
 From then on, each change is one command:
 

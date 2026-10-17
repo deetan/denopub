@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build and push the app to the TV over Wi-Fi (adb).
 #
-#   scripts/tv.sh pair <ip:port> <code>  one-time: Android 11+ "Wireless debugging" pairing
+#   scripts/tv.sh pair <ip:port> <code>  one-time: TV → Wireless debugging → Pair device with pairing code
 #   scripts/tv.sh connect [ip[:port]]    connect (remembers the address in .tv-address)
 #   scripts/tv.sh deploy                 build release APK (R8), install, launch  (default)
 #   scripts/tv.sh run                    launch without rebuilding
@@ -18,8 +18,15 @@ PKG=dev.dt.kinopub
 ADDR_FILE=.tv-address
 addr() { [[ -f $ADDR_FILE ]] && cat "$ADDR_FILE" || { echo "No TV address; run: scripts/tv.sh connect <ip>" >&2; exit 1; }; }
 
+# Wireless debugging (Android 11+) picks a new port after every reboot / toggle: find it via mDNS.
+discover() {
+  adb mdns services 2>/dev/null | awk '/_adb-tls-connect/ {print $3; exit}'
+}
+
 ensure_connected() {
-  local a; a=$(addr)
+  local a d; a=$(addr)
+  d=$(discover)
+  if [[ -n $d && $d != "$a" ]]; then a=$d; echo "$a" > "$ADDR_FILE"; fi
   if ! adb devices | grep -q "^$a[[:space:]]*device"; then
     adb connect "$a" >/dev/null
     sleep 1

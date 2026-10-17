@@ -42,7 +42,14 @@ fun KinoNavHost(c: AppContainer) {
     val ready by c.uiReady.collectAsState()
     Box(Modifier.fillMaxSize().background(K.bg)) {
         val start = loggedIn
-        if (start != null) NavHost(nav, startDestination = if (start) Routes.HOME else Routes.AUTH) {
+        // No fade transitions: a SurfaceView video can't fade, so leaving the player blinked.
+        if (start != null) NavHost(
+            nav, startDestination = if (start) Routes.HOME else Routes.AUTH,
+            enterTransition = { androidx.compose.animation.EnterTransition.None },
+            exitTransition = { androidx.compose.animation.ExitTransition.None },
+            popEnterTransition = { androidx.compose.animation.EnterTransition.None },
+            popExitTransition = { androidx.compose.animation.ExitTransition.None },
+        ) {
             composable(Routes.AUTH) {
                 AuthScreen(c) {
                     nav.navigate(Routes.HOME) { popUpTo(Routes.AUTH) { inclusive = true } }

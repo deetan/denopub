@@ -43,7 +43,7 @@ class AppContainer(app: Application) {
     val tokens = TokenStore(app)
     val api = KinopubApi(http, tokens)
     val prefs = LocalPrefs(app)
-    val repository = Repository(api, prefs)
+    val repository = Repository(api, prefs, app.filesDir)
     val registration = DeviceRegistration(api)
 
     /** Splash stays up until the first real screen has content (Home data or the login code). */
