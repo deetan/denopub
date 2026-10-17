@@ -113,7 +113,7 @@ class PlayerController(
                 choice = c.prefs.trackChoice(it.id) ?: TrackChoice()
                 // Playing counts as activity: the title jumps to the front of its Continue row,
                 // even before (or without) kino.pub updating its history.
-                c.appScope.launch { c.prefs.markStarted(it.id, true) }
+                c.appScope.launch { c.prefs.markPlayed(it.id) }
                 load(start)
             }.onFailure { _ui.value = _ui.value.copy(error = it.message) }
         }
@@ -214,7 +214,10 @@ class PlayerController(
         if (sec < 5) return
         val t = current
         // appScope, not viewModelScope: this also runs from onCleared, when viewModelScope is dead.
-        c.appScope.launch { c.repository.markTime(it.id, t.season, t.episode, sec) }
+        c.appScope.launch {
+            c.repository.markTime(it.id, t.season, t.episode, sec)
+            c.prefs.markPlayed(it.id) // keeps "last watched" right even when kino.pub history lags
+        }
     }
 
     // ---------- tracks ----------

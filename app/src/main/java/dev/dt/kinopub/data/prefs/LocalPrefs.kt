@@ -72,7 +72,24 @@ class LocalPrefs(private val context: Context) {
             (id.toLongOrNull() ?: return@mapNotNull null) to (ts.toLongOrNull() ?: 0L)
         }.toMap()
 
+    private val kPlayed = stringSetPreferencesKey("played_at") // "id:epochMs", last playback here
+
+    /** When each title was last played in this app. Cleared only by "Убрать из «Продолжить»". */
+    suspend fun playedAt(): Map<Long, Long> =
+        context.localStore.data.first()[kPlayed].orEmpty().mapNotNull {
+            val (id, ts) = it.split(':').takeIf { p -> p.size == 2 } ?: return@mapNotNull null
+            (id.toLongOrNull() ?: return@mapNotNull null) to (ts.toLongOrNull() ?: 0L)
+        }.toMap()
+
+    suspend fun markPlayed(id: Long, on: Boolean = true) {
+        context.localStore.edit { p ->
+            val rest = p[kPlayed].orEmpty().filterNot { it.startsWith("$id:") }.toSet()
+            p[kPlayed] = if (on) rest + "$id:${System.currentTimeMillis()}" else rest
+        }
+    }
+
     suspend fun markStarted(id: Long, on: Boolean) {
+        if (!on) android.util.Log.i("denopub", "startedAt cleared for $id")
         context.localStore.edit { p ->
             val rest = p[kStarted].orEmpty().filterNot { it.startsWith("$id:") }.toSet()
             p[kStarted] = if (on) rest + "$id:${System.currentTimeMillis()}" else rest

@@ -107,14 +107,17 @@ class Repository(
         // pressed "Начал смотреть" (local). The row is sorted by it, newest first.
         val lastWatchedMs = HashMap<Long, Long>()
         history.await().forEach { h -> lastWatchedMs.merge(h.item.id, h.lastSeen * 1000, ::maxOf) }
+        // kino.pub history can miss titles entirely (Peppa never showed up there), so local
+        // playback and "Начал смотреть" stamps count too.
         val started = prefs.startedAt().filter { (_, ts) -> System.currentTimeMillis() - ts < 30L * 24 * 3600 * 1000 }
-        fun recency(id: Long) = maxOf(lastWatchedMs[id] ?: 0L, started[id] ?: 0L)
+        val played = prefs.playedAt()
+        fun recency(id: Long) = maxOf(lastWatchedMs[id] ?: 0L, started[id] ?: 0L, played[id] ?: 0L)
 
         val candidates = LinkedHashMap<Long, Item>()
         val listed = (serials.await().map { Item(id = it.id, title = it.title, type = it.type, posters = it.posters) } +
             movies.await().map { Item(id = it.id, title = it.title, type = it.type, posters = it.posters) }).associateBy { it.id }
         // Started titles first, so a fresh "Начал смотреть" is never cut by the candidate limit.
-        started.keys.forEach { id -> (listed[id] ?: runCatching { api.item(id) }.getOrNull())?.let { candidates.putIfAbsent(id, it) } }
+        (played.keys + started.keys).forEach { id -> (listed[id] ?: runCatching { api.item(id) }.getOrNull())?.let { candidates.putIfAbsent(id, it) } }
         history.await().forEach { candidates.putIfAbsent(it.item.id, it.item) }
         // Subscribed serials ("Я смотрю") and unfinished movies belong on the row even without
         // recent history (they sort after anything with a timestamp).
@@ -140,6 +143,14 @@ class Repository(
             }
         }.awaitAll().filterNotNull()
             .sortedByDescending { it.lastActivityMs } // stable: untimed keep candidate order
+            .also { list ->
+                val fmt = java.text.SimpleDateFormat("dd.MM HH:mm:ss", java.util.Locale.ROOT)
+                list.forEach { e ->
+                    android.util.Log.i("denopub", "continue: order ${e.title.take(18)} kids=${e.isKids} " +
+                        "history=${lastWatchedMs[e.itemId]?.let { fmt.format(it) }} started=${started[e.itemId]?.let { fmt.format(it) }} " +
+                        "played=${played[e.itemId]?.let { fmt.format(it) }}")
+                }
+            }
     }
 
     /** Titles in [entries] not yet classified as kids/adult. */
@@ -274,6 +285,7 @@ class Repository(
     /** Drop from Continue on kino.pub: clear history and unsubscribe a serial. */
     suspend fun removeFromContinue(itemId: Long) {
         prefs.markStarted(itemId, false)
+        prefs.markPlayed(itemId, false)
         api.clearHistory(itemId)
         runCatching {
             val item = api.item(itemId)
