@@ -130,7 +130,7 @@ fun HomeScreen(
         return
     }
 
-    val continueRow = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val continueRow = rememberLazyListState()
     val column = rememberLazyListState()
     // Focus the first card as soon as anything is on screen (cached data), and again when the
     // fresh load lands — unless the user has already started moving around.
@@ -218,20 +218,24 @@ fun HomeScreen(
                         .then(if (first) Modifier.focusRequester(firstFocus) else Modifier),
                 )
 
-                // Grown-up titles: two rows that scroll together (↑/↓ moves between them),
-                // most recent top-left, so ~10 titles are visible without scrolling.
+                // Grown-up titles read like text: the top row is the 4 most recent, left to right;
+                // the second row continues with the rest and scrolls sideways.
                 val adult = data.continueAdult
                 if (adult.isNotEmpty()) {
-                    val rows = if (adult.size > 4) 2 else 1
-                    LazyHorizontalGrid(
-                        rows = GridCells.Fixed(rows),
-                        state = continueRow,
-                        contentPadding = PaddingValues(horizontal = K.screenPadH, vertical = 6.dp),
+                    Row(
+                        Modifier.padding(horizontal = K.screenPadH),
                         horizontalArrangement = Arrangement.spacedBy(K.cardGap),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(if (rows == 2) 252.dp else 126.dp),
                     ) {
-                        gridItemsIndexed(adult, key = { _, e -> e.itemId }) { i, e -> card(e, first = i == 0) }
+                        adult.take(TOP_ROW).forEachIndexed { i, e -> card(e, first = i == 0) }
+                    }
+                    if (adult.size > TOP_ROW) {
+                        LazyRow(
+                            state = continueRow,
+                            contentPadding = PaddingValues(horizontal = K.screenPadH),
+                            horizontalArrangement = Arrangement.spacedBy(K.cardGap),
+                        ) {
+                            itemsIndexed(adult.drop(TOP_ROW), key = { _, e -> e.itemId }) { _, e -> card(e, first = false) }
+                        }
                     }
                 }
                 // Kids' titles get their own row, so a child finds cartoons without the rest.
@@ -358,6 +362,8 @@ private fun Section(title: String, badge: String? = null, content: @Composable (
         content()
     }
 }
+
+private const val TOP_ROW = 4
 
 private fun continueMeta(e: ContinueEntry): String {
     val left = (e.durationSec - e.target.startSec).coerceAtLeast(0)

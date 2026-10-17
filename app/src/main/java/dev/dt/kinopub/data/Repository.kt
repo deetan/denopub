@@ -29,6 +29,7 @@ data class ContinueEntry(
     val newEpisodes: Int,
     val remainingEpisodes: Int,
     val isKids: Boolean = false,
+    val lastActivityMs: Long = 0,      // max(last watched, "Начал смотреть"); sort key
 ) {
     /** "S2·E5" for serials, null for movies. */
     val episodeLabel: String? get() = target.season?.let { "S$it·E${target.episode}" }
@@ -99,42 +100,39 @@ class Repository(
         val movies = async { api.watchingMovies() }
 
         val newCounts = serials.await().associate { it.id to it.newEpisodes }
-        val ordered = LinkedHashMap<Long, Item>()
-        // Just started via "Начал смотреть" and newer than the last history entry: lead the row.
-        // (Without this a fresh subscription sat after ~100 history titles and was cut off.)
-        val lastSeenMs = (history.await().maxOfOrNull { it.lastSeen } ?: 0L) * 1000
-        val started = prefs.startedAt().filter { (_, ts) -> System.currentTimeMillis() - ts < 14L * 24 * 3600 * 1000 }
-        val allById = (serials.await().map { Item(id = it.id, title = it.title, type = it.type, posters = it.posters) } +
+
+        // One recency per title = latest of: last watched (kino.pub history, newest first) or
+        // pressed "Начал смотреть" (local). The row is sorted by it, newest first.
+        val lastWatchedMs = HashMap<Long, Long>()
+        history.await().forEach { h -> lastWatchedMs.merge(h.item.id, h.lastSeen * 1000, ::maxOf) }
+        val started = prefs.startedAt().filter { (_, ts) -> System.currentTimeMillis() - ts < 30L * 24 * 3600 * 1000 }
+        fun recency(id: Long) = maxOf(lastWatchedMs[id] ?: 0L, started[id] ?: 0L)
+
+        val candidates = LinkedHashMap<Long, Item>()
+        val listed = (serials.await().map { Item(id = it.id, title = it.title, type = it.type, posters = it.posters) } +
             movies.await().map { Item(id = it.id, title = it.title, type = it.type, posters = it.posters) }).associateBy { it.id }
-        started.filter { (_, ts) -> ts > lastSeenMs }.entries.sortedByDescending { it.value }.forEach { (id, _) ->
-            ordered.putIfAbsent(id, allById[id] ?: runCatching { api.item(id) }.getOrNull() ?: return@forEach)
-        }
-        // Subscribed serials with nothing watched yet were started explicitly too (e.g. before
-        // startedAt existed): they also go before history, or they'd never make the cut.
-        val historyIds = history.await().map { it.item.id }.toSet()
-        serials.await().filter { it.subscribed && it.watched == 0 && it.id !in historyIds }.forEach { s ->
-            ordered.putIfAbsent(s.id, Item(id = s.id, title = s.title, type = s.type, posters = s.posters))
-        }
-        history.await().forEach { ordered.putIfAbsent(it.item.id, it.item) }
-        // Subscribed serials ("Я смотрю") belong on the row even without recent history.
-        serials.await().filter { it.subscribed }.forEach { s ->
-            ordered.putIfAbsent(s.id, Item(id = s.id, title = s.title, type = s.type, posters = s.posters))
-        }
-        movies.await().forEach { m ->
-            ordered.putIfAbsent(m.id, Item(id = m.id, title = m.title, type = m.type, posters = m.posters))
-        }
+        // Started titles first, so a fresh "Начал смотреть" is never cut by the candidate limit.
+        started.keys.forEach { id -> (listed[id] ?: runCatching { api.item(id) }.getOrNull())?.let { candidates.putIfAbsent(id, it) } }
+        history.await().forEach { candidates.putIfAbsent(it.item.id, it.item) }
+        // Subscribed serials ("Я смотрю") and unfinished movies belong on the row even without
+        // recent history (they sort after anything with a timestamp).
+        serials.await().filter { it.subscribed }.forEach { candidates.putIfAbsent(it.id, listed.getValue(it.id)) }
+        movies.await().forEach { candidates.putIfAbsent(it.id, listed.getValue(it.id)) }
 
         // Kids/adult comes from a persistent cache only, so Home never waits on /items calls;
         // unknown titles are classified afterwards by classifyKids().
         val kids = prefs.kidsFlags()
-        ordered.values.take(limit * 2).map { item ->
+        candidates.values.take(limit * 2).map { item ->
             async {
                 runCatching {
                     val info = api.watching(item.id)
-                    resumeEntry(item, info, newCounts[item.id] ?: 0)?.copy(isKids = kids[item.id] == true)
+                    resumeEntry(item, info, newCounts[item.id] ?: 0)
+                        ?.copy(isKids = kids[item.id] == true, lastActivityMs = recency(item.id))
                 }.getOrNull()
             }
-        }.awaitAll().filterNotNull().take(limit)
+        }.awaitAll().filterNotNull()
+            .sortedByDescending { it.lastActivityMs } // stable: untimed keep candidate order
+            .take(limit)
     }
 
     /** Titles in [entries] not yet classified as kids/adult. */
