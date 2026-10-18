@@ -2,7 +2,7 @@
 
 **denopub** — a personal Android TV client for kino.pub, built to resume what you're watching in one click.
 
-`status: active, early (v0.1)` · `Kotlin · Jetpack Compose for TV · Media3 ExoPlayer` · `runs on: Chromecast with Google TV (sideloaded, local only)`
+`status: active, in daily use (v0.2)` · `Kotlin · Jetpack Compose for TV · Media3 ExoPlayer` · `runs on: Chromecast with Google TV (sideloaded, local only)`
 
 ## What it does
 
@@ -10,29 +10,31 @@ A replacement for the official kino.pub TV app, for one user. When it opens, foc
 on the first thing you're watching, so pressing OK resumes at the exact second. The home screen
 is built around three jobs, in order of how often they come up:
 
-1. **Continue.** In-progress serials and unfinished movies, most recent first. A large hero shows
-   the focused title, its episode, and how much is left.
+1. **Continue.** Three rows — Сериалы, Фильмы, Детям — each with the most recently watched title
+   first. A compact header shows the focused title, its episode, and how much is left.
 2. **Wishlist.** A kino.pub bookmark folder called `Wishlist`. Titles you haven't seen on the TV yet
    carry a "new" badge. *(Phase 2: send a screenshot from your phone to a bot, which recognizes
    the title and adds it.)*
 3. **What's new.** New movies, new serials, and popular titles on kino.pub. *(Personal
    recommendations come later.)*
 
-Long-press any card or episode for actions: mark watched (episode, everything up to here, season,
-whole title), "Начал смотреть", remove from Continue, wishlist add/remove. Every action is written to
-kino.pub immediately, so the official apps and the website see the same state. Continue is split into
-two compact rows: grown-up titles first, then kids' (cartoons) titles. There's also a search screen
-(movies / serials filter) behind the **Поиск** button (↑ from the first row).
+Long-press any card for actions: mark watched, "Начал смотреть", remove from Continue, wishlist
+add/remove. In a title card, long-press an episode or season to toggle it watched. Every action is
+written to kino.pub immediately, so the official apps and the website see the same state. The title
+card also shows the English IMDb description (OK on the description opens it in full) and
+IMDb/kino.pub trailers. There's a search screen (movies / serials filter) behind **Поиск**.
 
-The player seeks ±10 s with ← / → (hold to keep seeking). It has a tracks panel (press ↓) with one row each for voiceover, subtitles, and quality.
-Every option is visible at once, so there are no lists to scroll. Your picks are saved per
-serial and applied to the next episode automatically. Playback asks kino.pub for HEVC, 4K, and HDR
-streams, and uses a SurfaceView so HDR10 and Dolby Vision reach the TV.
+The player has three levels: ↓ shows the seek bar (← → scrub with a preview frame, faster the
+longer you hold), ↓ again opens one row each for voiceover, subtitles and quality (every option
+visible at once), and ↑ shows a frame-stepping bar on top; ↑ hides each level again. OK pauses.
+Track picks are saved per title and applied to the next episode automatically. Playback asks
+kino.pub for HEVC, 4K and HDR streams and uses a SurfaceView so HDR10 and Dolby Vision reach the TV.
 
-**Google TV integration:** with the TV set to start on the dongle's input, denopub opens by itself
-when the TV is switched on (enable *Settings → System → Accessibility → denopub* once on the
-dongle). Titles in progress are also pushed to the system "Continue watching" row and resume from
-there.
+**On the owner's TV** (Hisense VIDAA + this Chromecast): the TV starts on the dongle's input
+("Default Startup Page = Last Accessed Source"), and denopub is the first app tile on Google TV.
+Google TV's own "Continue watching" row and widgets are not available to sideloaded apps.
+
+Current state, open items and how to resume work: [`HANDOFF.md`](HANDOFF.md).
 
 Wireframes: see [`docs/design-prompt.md`](docs/design-prompt.md). That file is also the prompt to
 use for visual polish.
@@ -140,14 +142,17 @@ app/src/main/java/dev/dt/kinopub/
   MainActivity.kt          single activity
   data/api/                KinopubApi (hand-written OkHttp client) + DTOs
   data/auth/               TokenStore, DeviceRegistration (4K/HDR/hls4 settings)
-  data/prefs/LocalPrefs.kt per-title TrackChoice, wishlist "seen" set
+  data/api/ImdbClient.kt   IMDb plot + trailers (unofficial GraphQL)
+  data/prefs/LocalPrefs.kt track choices, wishlist seen-set, kids flags, recency stamps
   data/Repository.kt       home assembly, resume-point logic, wishlist folder
   ui/Navigation.kt         routes: auth, home, details/{id}, player/{id}?season&episode&start
-  ui/home/                 Continue hero + adult/kids rows, wishlist, new releases
+  ui/home/                 compact header + Continue rows (serials/movies/kids), wishlist, new releases
   ui/search/               search with movie/serial filter
   ui/common/               cards, long-press ActionMenu
-  ui/details/              title page, seasons, episodes
-  ui/player/               PlayerController (ExoPlayer + track memory), PlayerScreen (OSD, tracks panel)
+  ui/details/              title page: plots, trailers, seasons, episodes
+  ui/player/               PlayerController (ExoPlayer, voiceovers, preview player), PlayerScreen
+                           (fine bar / seek bar / tracks panel), TrailerScreen
+  system/                  WatchNext (Google TV row, filtered), WakeService (inert, declined)
   ui/theme/Theme.kt        design tokens (object K)
 docs/kinopub-api.md        kino.pub API reference (verified vs UNVERIFIED notes)
 docs/design-prompt.md      UI spec / prompt for visual design
@@ -157,8 +162,8 @@ scripts/tv.sh              Wi-Fi deploy helper
 
 ## Deploy
 
-There is no store release. The debug APK is the build that runs on the TV, installed with
-`scripts/tv.sh deploy`.
+There is no store release. The R8 release APK (signed with the debug key) is the build that runs
+on the TV, installed with `scripts/tv.sh deploy`.
 
 ## License
 
