@@ -27,6 +27,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -71,6 +80,7 @@ fun DetailsScreen(
     var wishlisted by remember { mutableStateOf<Boolean?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf<Pair<String, List<MenuAction>>?>(null) }
+    var showPlot by remember { mutableStateOf(false) }
     var reloads by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val playFocus = remember { FocusRequester() }
@@ -115,6 +125,7 @@ fun DetailsScreen(
     val (titleRu, titleOrig) = splitTitle(it.title)
 
     menu?.let { (t, actions) -> ActionMenu(t, actions) { menu = null } }
+    if (showPlot) PlotDialog(titleRu, it.plot, imdb?.plot) { showPlot = false }
 
     fun episodeMenu(s: Int, e: Video) {
         val watched = e.watching?.status == 1
@@ -160,11 +171,26 @@ fun DetailsScreen(
                     if (it.genres.isNotEmpty()) {
                         Text(it.genres.mapNotNull { g -> g.title }.joinToString(", "), style = MaterialTheme.typography.labelMedium, color = K.muted)
                     }
-                    it.plot?.let { p ->
-                        Text(p, style = MaterialTheme.typography.bodyMedium, color = K.text.copy(alpha = 0.85f), maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    }
-                    imdb?.plot?.let { p ->
-                        Text("IMDb · $p", style = MaterialTheme.typography.bodyMedium, color = K.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (it.plot != null || imdb?.plot != null) {
+                        // Truncated here; focus it (↑ from the buttons) and press OK for the full text.
+                        androidx.tv.material3.Surface(
+                            onClick = { showPlot = true },
+                            colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                                containerColor = Color.Transparent,
+                                focusedContainerColor = K.surfaceHi,
+                            ),
+                            scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        ) {
+                            Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                it.plot?.let { p ->
+                                    Text(p, style = MaterialTheme.typography.bodyMedium, color = K.text.copy(alpha = 0.85f), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                }
+                                imdb?.plot?.let { p ->
+                                    Text("IMDb · $p", style = MaterialTheme.typography.bodyMedium, color = K.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -211,7 +237,11 @@ fun DetailsScreen(
                 imdb?.videos?.forEach { v -> add(TrailerChip(v.name, v.seconds, v.url)) }
             }
             if (trailers.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    // Room for the focus zoom: without it the focused chip is clipped by the row.
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                ) {
                     itemsIndexed(trailers, key = { _, t -> t.url }) { i, t ->
                         OutlinedButton(
                             onClick = { onTrailer(t.url, "$titleRu — ${t.name}") },
@@ -225,7 +255,11 @@ fun DetailsScreen(
 
             // Seasons → episodes
             if (it.seasons.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    // Room for the focus zoom: without it the focused chip is clipped by the row.
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                ) {
                     items(it.seasons, key = { s -> s.number }) { s ->
                         val left = s.episodes.count { e -> e.watching?.status != 1 }
                         val label = "Сезон ${s.number}" + if (left == 0) " ✓" else ""
@@ -342,4 +376,40 @@ private fun resumeTarget(item: Item): ResumeTarget? {
     }
     val v = item.videos.firstOrNull { resumeSec(it) > 0 || it.watching?.status == 0 } ?: return null
     return ResumeTarget(item.id, null, v.number, resumeSec(v))
+}
+
+/** Full description: kino.pub's Russian text, then IMDb's English one. Back closes. */
+@Composable
+private fun PlotDialog(title: String, ru: String?, en: String?, onDismiss: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        val scroll = androidx.compose.foundation.rememberScrollState()
+        val scope = rememberCoroutineScope()
+        Column(
+            Modifier
+                .width(900.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(K.surface)
+                .padding(28.dp)
+                .focusRequester(focus)
+                .focusable()
+                // ↑ ↓ scroll long texts; OK or Back closes.
+                .onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (e.key) {
+                        Key.DirectionDown -> { scope.launch { scroll.animateScrollBy(160f) }; true }
+                        Key.DirectionUp -> { scope.launch { scroll.animateScrollBy(-160f) }; true }
+                        Key.DirectionCenter, Key.Enter -> { onDismiss(); true }
+                        else -> false
+                    }
+                }
+                .verticalScroll(scroll),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.headlineSmall, color = K.text)
+            ru?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.text) }
+            en?.let { Text("IMDb · $it", style = MaterialTheme.typography.bodyMedium, color = K.muted) }
+        }
+    }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }

@@ -135,7 +135,7 @@ class Repository(
             async {
                 runCatching {
                     val info = api.watching(item.id)
-                    resumeEntry(item, info, newCounts[item.id] ?: 0)
+                    resumeEntry(item, info, newCounts[item.id] ?: 0, explicit = item.id in started || item.id in played)
                         ?.copy(isKids = kids[item.id] == true, lastActivityMs = recency(item.id))
                         .also { if (it == null) android.util.Log.i("denopub", "continue: dropped ${item.id} ${item.title} (nothing to resume)") }
                 }.onFailure { android.util.Log.w("denopub", "continue: failed ${item.id} ${item.title}: ${it.message?.take(200)}") }
@@ -167,7 +167,12 @@ class Repository(
         flags.filterValues { it }.keys
     }
 
-    private fun resumeEntry(item: Item, info: WatchingInfo, newEpisodes: Int): ContinueEntry? {
+    /**
+     * [explicit]: the user started this title here ("Начал смотреть" or played it). Then a title
+     * with no progress yet still gets a card, starting from its first unwatched part/episode —
+     * kino.pub ignores tiny marktime values, so "Начал смотреть" alone left nothing to resume.
+     */
+    private fun resumeEntry(item: Item, info: WatchingInfo, newEpisodes: Int, explicit: Boolean = false): ContinueEntry? {
         val poster = item.posters?.wide ?: item.posters?.big ?: item.posters?.medium
         if (info.seasons.isNotEmpty()) {
             val flat = info.seasons.sortedBy { it.number }.flatMap { s ->
@@ -176,6 +181,7 @@ class Repository(
             // First episode after the last one touched that is not finished.
             // marktime stores time without touching status: "in progress" = time > 0, status != 1.
             val lastTouched = flat.indexOfLast { (_, e) -> e.status == 1 || e.time > 0 }
+            if (lastTouched < 0 && !explicit && newEpisodes == 0) return null // never touched
             val next = flat.drop(maxOf(lastTouched, 0)).firstOrNull { (_, e) -> e.status != 1 }
                 ?: return null // fully watched, nothing new
             val (season, ep) = next
@@ -186,7 +192,9 @@ class Repository(
                 durationSec = ep.duration, newEpisodes = newEpisodes, remainingEpisodes = remaining,
             )
         }
-        val part = info.videos.firstOrNull { it.status != 1 && (it.status == 0 || it.time > 0) } ?: return null
+        val part = info.videos.firstOrNull { it.status != 1 && (it.status == 0 || it.time > 0) }
+            ?: info.videos.firstOrNull { explicit && it.status != 1 }
+            ?: return null
         return ContinueEntry(
             item.id, item.title, poster, isSerial = false,
             target = ResumeTarget(item.id, null, part.number, part.time),
@@ -263,8 +271,17 @@ class Repository(
     /** Returns the new state. */
     suspend fun setWishlisted(itemId: Long, on: Boolean): Boolean {
         val folder = wishlistFolder()
-        if (on) api.addBookmark(itemId, folder) else api.removeBookmark(itemId, folder)
-        return on
+        if (on) {
+            if (api.itemFolders(itemId).none { it.id == folder }) api.addBookmark(itemId, folder)
+            return true
+        }
+        // kino.pub can hold the same item in a folder more than once; remove until it's gone.
+        repeat(4) {
+            api.removeBookmark(itemId, folder)
+            if (api.itemFolders(itemId).none { it.id == folder }) return false
+        }
+        android.util.Log.w("denopub", "wishlist: $itemId still in folder $folder after removal")
+        return api.itemFolders(itemId).any { it.id == folder }
     }
 
     /**

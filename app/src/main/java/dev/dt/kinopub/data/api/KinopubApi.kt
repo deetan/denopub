@@ -134,7 +134,8 @@ class KinopubApi(
     suspend fun itemFolders(item: Long): List<BookmarkFolder> =
         get<ItemFoldersResponse>("bookmarks/get-item-folders", "item" to item).folders
     suspend fun removeBookmark(item: Long, folder: Long) {
-        post<Unit>(url("bookmarks/remove-item"), mapOf("item" to "$item", "folder" to "$folder"))
+        val r = post<kotlinx.serialization.json.JsonElement>(url("bookmarks/remove-item"), mapOf("item" to "$item", "folder" to "$folder"))
+        android.util.Log.i("denopub", "bookmarks/remove-item $item from $folder -> $r")
     }
     suspend fun addBookmark(item: Long, folder: Long) {
         post<Unit>(url("bookmarks/add"), mapOf("item" to "$item", "folder" to "$folder"))
