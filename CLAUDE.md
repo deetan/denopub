@@ -54,7 +54,14 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   NONE → ↓ OSD (seek bar with white position marker + hints + stats line; ← → scrub with a
   preview frame from a muted 360p second player, commits ~0.9 s after key-up or on OK) →
   ↓ TRACKS panel (voiceover / subtitles / quality / next episode; ↑ from its top row → OSD).
-  OK = pause/resume only (full-screen ❚❚, no seek bar). Steps grow with **hold time**: scrub
+  NONE → ← → = **quick jump**: seeks at once, no seek bar, only a "+18 с · шаг 5 с" label
+  (accumulated offset of the burst). Step grows by step count within a burst (presses < 1.5 s
+  apart, or a hold throttled to one step per 220 ms): 3 s ×2 → 5 s ×2 → 10 s ×2 → 30 s ×2 →
+  1 min ×2 → 5 min (`jumpStepMs`). Media ⏪/⏩ do the same.
+  OK = pause/resume only: a big ❚❚ over a dimmed picture fades after 1.2 s into a small
+  top-right badge. Pauses caused by frame stepping show **no** pause sign (it's a still frame
+  you're studying) — tracked by `userPaused`; pause state comes from `playWhenReady`, not
+  `isPlaying` (buffering after a seek isn't "playing"). OSD scrub steps grow with hold time
   10 s → 30 s → 1 min → 2 min → 5 min; fine 0.5 → 1 → 2 → 5 s. Overlays slide/fade
   (`AnimatedVisibility`). Back: panel → OSD, scrub → cancel, else exit.
 - **Title card** (`DetailsScreen`): poster, facts, Russian plot (kino.pub) + English plot (IMDb) —

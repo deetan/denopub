@@ -89,8 +89,9 @@ private fun fineStepMs(heldMs: Long) = when {
  *   ↓ once           → OSD: seek bar with position marker; ← → scrub with a preview frame, commits
  *                      ~1 s after release or on OK
  *   ↓ again          → TRACKS: voiceover / subtitles / quality panel; ↑ from its top row → OSD
- *   ← / → (video)    → opens OSD and starts scrubbing (accelerates while held)
- *   OK / play-pause  → pause/resume; paused = full-screen dim with a pause sign
+ *   ← / → (video)    → quick jump, no seek bar: just a "+18 с" label. Steps grow over a burst of
+ *                      presses / a hold: 3 s ×2 → 5 s ×2 → 10 s ×2 → 30 s ×2 → 1 min ×2 → 5 min
+ *   OK / play-pause  → pause/resume; a big pause sign fades into a small corner badge
  *   audio-track key  → next voiceover         CC key → subtitles on/off
  *   Back             → panel → OSD, scrub → cancel, otherwise exit (progress is saved)
  */
@@ -110,13 +111,13 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
 
     var pos by remember { mutableLongStateOf(0L) }
     var dur by remember { mutableLongStateOf(0L) }
-    var playing by remember { mutableStateOf(true) }
+    var wantsPlay by remember { mutableStateOf(true) }
     var stats by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
         while (true) {
             pos = vm.player.currentPosition
             dur = vm.player.duration.coerceAtLeast(0)
-            playing = vm.player.isPlaying || vm.player.playbackState == androidx.media3.common.Player.STATE_BUFFERING
+            wantsPlay = vm.player.playWhenReady
             stats = vm.stats()
             delay(250)
         }
@@ -136,7 +137,37 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     var panelHasFocus by remember { mutableStateOf(false) }
     var panelFocusTick by remember { mutableIntStateOf(0) }
 
-    fun togglePause() { if (vm.player.isPlaying) vm.player.pause() else vm.player.play() }
+    // Pause sign: big for a moment after the user pauses, then a small badge. Pauses made by
+    // frame stepping show nothing — that's a still frame you're looking at.
+    var userPaused by remember { mutableStateOf(false) }
+    var bigPause by remember { mutableStateOf(false) }
+    var pauseTick by remember { mutableIntStateOf(0) }
+    fun userPause() { vm.player.pause(); userPaused = true; pauseTick++ }
+    fun togglePause() { if (vm.player.playWhenReady) userPause() else vm.player.play() }
+
+    // Quick jump (← / → with no overlay): seeks right away, shows only the accumulated offset.
+    var jumpTotal by remember { mutableLongStateOf(0L) }
+    var jumpStep by remember { mutableLongStateOf(0L) }
+    var jumpSteps by remember { mutableIntStateOf(0) }
+    var jumpForward by remember { mutableStateOf(true) }
+    var jumpAt by remember { mutableLongStateOf(0L) }
+    var jumpVisible by remember { mutableStateOf(false) }
+    fun quickSeek(forward: Boolean, repeat: Int) {
+        val now = System.currentTimeMillis()
+        // Auto-repeat fires every ~50 ms: one step per 220 ms while held.
+        if (repeat > 0 && now - jumpAt < 220) return
+        if (!(jumpVisible && jumpForward == forward && now - jumpAt < 1_500)) { jumpSteps = 0; jumpTotal = 0 }
+        jumpSteps++; jumpForward = forward; jumpAt = now
+        val step = jumpStepMs(jumpSteps)
+        val from = vm.player.currentPosition
+        val to = (from + if (forward) step else -step).coerceIn(0, maxOf(dur, 0))
+        jumpTotal += to - from
+        jumpStep = step
+        jumpVisible = true
+        vm.player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
+        vm.player.seekTo(to)
+        pos = to
+    }
     fun cancelScrub() { scrubMs = null; vm.releasePreview() }
     fun commitScrub() {
         val s = scrubMs ?: return
@@ -152,7 +183,8 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
         vm.previewAt(next)
     }
     fun fine(forward: Boolean, repeat: Int) {
-        if (vm.player.isPlaying) vm.player.pause()
+        if (vm.player.playWhenReady) vm.player.pause()
+        userPaused = false; bigPause = false
         vm.player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
         val step = fineStepMs(held(repeat))
         fineLabel = (if (forward) "+" else "−") + stepLabelFine(step)
@@ -177,6 +209,17 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             Overlay.FINE -> { delay(3_000); overlay = Overlay.NONE }
             else -> Unit
         }
+    }
+    LaunchedEffect(pauseTick) {
+        if (pauseTick == 0) return@LaunchedEffect
+        bigPause = true
+        delay(1_200)
+        bigPause = false
+    }
+    LaunchedEffect(wantsPlay) { if (wantsPlay) { userPaused = false; bigPause = false } }
+    LaunchedEffect(jumpAt) {
+        delay(1_500)
+        jumpVisible = false
     }
     // Releasing ← / → while scrubbing: jump there after a beat (OK jumps at once).
     LaunchedEffect(scrubReleaseTick) {
@@ -221,9 +264,9 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                 when (e.key) {
                     Key.MediaPlayPause, Key.Spacebar -> { togglePause(); true }
                     Key.MediaPlay -> { vm.player.play(); true }
-                    Key.MediaPause -> { vm.player.pause(); true }
-                    Key.MediaRewind -> { overlay = Overlay.OSD; scrub(false, repeat); scrubReleaseTick++; true }
-                    Key.MediaFastForward -> { overlay = Overlay.OSD; scrub(true, repeat); scrubReleaseTick++; true }
+                    Key.MediaPause -> { userPause(); true }
+                    Key.MediaRewind -> { quickSeek(false, repeat); true }
+                    Key.MediaFastForward -> { quickSeek(true, repeat); true }
                     else -> when (overlay) {
                         Overlay.FINE -> when (e.key) {
                             Key.DirectionLeft -> { fine(false, repeat); true }
@@ -245,9 +288,9 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                         else -> when (e.key) { // NONE
                             Key.DirectionUp -> { overlay = Overlay.FINE; true }
                             Key.DirectionDown -> { overlay = Overlay.OSD; true }
-                            Key.DirectionLeft -> { overlay = Overlay.OSD; scrub(false, repeat); true }
-                            Key.DirectionRight -> { overlay = Overlay.OSD; scrub(true, repeat); true }
-                            // Just pause/resume: the full-screen pause sign is enough, no seek bar.
+                            Key.DirectionLeft -> { quickSeek(false, repeat); true }
+                            Key.DirectionRight -> { quickSeek(true, repeat); true }
+                            // Just pause/resume: the pause sign is enough, no seek bar.
                             Key.DirectionCenter, Key.Enter -> { togglePause(); true }
                             else -> false
                         }
@@ -272,13 +315,47 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Paused: dim the picture and show a big pause sign (not while stepping frames).
+        // Just paused: big sign over a dimmed picture, fading out after a moment…
         AnimatedVisibility(
-            visible = !playing && overlay != Overlay.FINE && ui.error == null,
-            enter = fadeIn(tween(180)), exit = fadeOut(tween(180)),
+            visible = bigPause && !wantsPlay && ui.error == null,
+            enter = fadeIn(tween(150)), exit = fadeOut(tween(700)),
         ) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
                 Text("❚❚", fontSize = 120.sp, color = Color.White.copy(alpha = 0.9f))
+            }
+        }
+        // …leaving a small badge in the corner so the still picture stays clean.
+        AnimatedVisibility(
+            visible = userPaused && !bigPause && !wantsPlay && overlay == Overlay.NONE && ui.error == null,
+            enter = fadeIn(tween(500)), exit = fadeOut(tween(150)),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 28.dp, end = 36.dp),
+        ) {
+            Text(
+                "❚❚", fontSize = 26.sp, color = Color.White.copy(alpha = 0.8f),
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.4f))
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+
+        // Quick jump label: the accumulated offset, the current step and where we are.
+        AnimatedVisibility(
+            visible = jumpVisible && overlay == Overlay.NONE,
+            enter = fadeIn(tween(120)), exit = fadeOut(tween(400)),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp),
+        ) {
+            Column(
+                Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 28.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    (if (jumpTotal >= 0) "+" else "−") + offsetLabel(kotlin.math.abs(jumpTotal)),
+                    fontSize = 44.sp, color = Color.White,
+                )
+                Text(
+                    "шаг ${stepLabel(jumpStep)}  ·  ${clock(pos)} / ${clock(dur)}",
+                    style = MaterialTheme.typography.labelMedium, color = K.muted,
+                )
             }
         }
 
@@ -350,7 +427,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                 if (overlay == Overlay.OSD) {
                     Text(
                         if (scrubMs != null) "← →  выбрать момент (удерживайте — быстрее)  ·  отпустите или OK — перейти  ·  Back — отмена"
-                        else "← →  перемотка с превью, удерживайте — быстрее  ·  ↓ — озвучка, субтитры, качество  ·  ↑ — покадрово",
+                        else "← →  перемотка с превью  ·  ↓ — озвучка, субтитры, качество  ·  ↑ — покадрово",
                         style = MaterialTheme.typography.labelMedium, color = K.muted,
                     )
                     if (stats.isNotEmpty()) Text(stats, style = MaterialTheme.typography.labelMedium, color = K.muted.copy(alpha = 0.8f))
@@ -399,6 +476,18 @@ private fun seekStepMs(heldMs: Long): Long = when {
 }
 
 private fun stepLabel(ms: Long): String = if (ms >= 60_000) "${ms / 60_000} мин" else "${ms / 1000} с"
+
+/** Quick-jump step by its number in the burst: 3 s ×2 → 5 s ×2 → 10 s ×2 → 30 s ×2 → 1 min ×2 → 5 min. */
+private fun jumpStepMs(n: Int): Long = when {
+    n <= 2 -> 3_000L
+    n <= 4 -> 5_000L
+    n <= 6 -> 10_000L
+    n <= 8 -> 30_000L
+    n <= 10 -> 60_000L
+    else -> 300_000L
+}
+
+private fun offsetLabel(ms: Long): String = if (ms < 60_000) "${ms / 1000} с" else clock(ms)
 
 /**
  * Every option of every kind on screen at once: one horizontal row per track type.

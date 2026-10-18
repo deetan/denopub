@@ -33,8 +33,9 @@ Verified on the real Chromecast by the owner:
   - ↓ again opens the voiceover/subtitles/quality panel.
   - ↑ hides each level in turn.
   - Overlays animate in and out.
-  - Holding ← / → accelerates the longer it's held.
-  - OK pauses with a full-screen ❚❚, without bringing up the seek bar.
+  - With no overlay, ← / → jump at once and show only "+N с" (steps 3 s → 5 s → 10 s → 30 s →
+    1 min → 5 min over a burst/hold). Shipped 2026-10-18 at the owner's request; awaiting feedback.
+  - OK pauses: a big ❚❚ fades into a small corner badge; frame stepping shows no pause sign.
 - **Compact Home:** a two-column header and 160 dp cards, so 3.5 rows fit on screen.
 - Long-press menus on every card, and wishlist add/remove. Every write goes to kino.pub.
 - Brand art (icon, TV banner, splash) from the owner's Claude Design export, with sources in `docs/brand/`.
@@ -47,9 +48,10 @@ Verified on the real Chromecast by the owner:
    (`bookmarks/remove-item … ->`). **It's not confirmed yet**: the owner was asked to remove it once
    more. If it still comes back, check the logged responses. Fallbacks: call `remove-item` without
    `folder`, or use `toggle-item`.
-2. **Animations and hold-to-accelerate** in the player went out on 2026-10-17. The owner hasn't
-   given feedback on how they feel; they may need tuning (`seekStepMs`, `fineStepMs`, and the tween
-   durations in `PlayerScreen.kt`).
+2. **Player controls reworked 2026-10-18** (owner disliked scrubbing and the pause overlay):
+   quick jump with a "+N с" label, progressive steps, fading pause sign, no pause sign while frame
+   stepping. Deployed to the TV, not yet tested by the owner, who has more player feedback to
+   dictate. Tuning knobs: `jumpStepMs`, the 220 ms hold throttle, the 1.2 s / 1.5 s fade delays.
 3. **Diagnostic logging is still on** (tag `denopub`):
    - `continue: candidates`, `continue: dropped`, `continue: order` (with all sort keys) in `Repository.continueWatching`.
    - The HLS `#EXT-X-MEDIA` dump and audio-track list in `PlayerController`.
