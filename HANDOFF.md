@@ -49,7 +49,8 @@ Verified on the real Chromecast by the owner:
    more. If it still comes back, check the logged responses. Fallbacks: call `remove-item` without
    `folder`, or use `toggle-item`.
 1a. **Sport row (2026-10-18, new)**: Eurosport/Okko/Match from `/v1/tv` + now-playing (iptvx XMLTV)
-   + still frames. Built; first TV run pending — check `adb logcat -s denopub | grep -E "sport|epg|snap|decode"`
+   + still frames. Verified on the TV 2026-10-18: 13 channels, guide parse 13 s on the Chromecast,
+   frames decode, live playback works. Check `adb logcat -s denopub | grep -E "sport|epg|snap|decode"`
    (EPG parse time on the Chromecast and whether MediaCodec gives a YUV image are the unknowns).
 2. **Player controls reworked 2026-10-18** (owner disliked scrubbing and the pause overlay):
    quick jump with a "+N с" label, progressive steps, fading pause sign, no pause sign while frame

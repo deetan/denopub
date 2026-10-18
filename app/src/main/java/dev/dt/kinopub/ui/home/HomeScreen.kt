@@ -256,16 +256,13 @@ fun HomeScreen(
                     items(sport.channels, key = { it.name }) { ch ->
                         val now = sport.now(ch, minute)
                         val progress = now?.let { ((minute - it.start).toFloat() / (it.stop - it.start)).coerceIn(0f, 1f) } ?: 0f
-                        ContinueCard(
-                            title = ch.title,
+                        dev.dt.kinopub.ui.common.SportCard(
+                            channel = ch.title,
                             image = sport.snaps[ch.name]?.let { "file://$it" } ?: ch.logo,
-                            episodeLabel = null,
-                            meta = now?.let { "${it.title} · до ${hhmm(it.stop)}" } ?: "",
+                            programme = now?.title,
+                            until = now?.let { hhmm(it.stop) },
                             progress = progress,
-                            newBadge = null,
                             onClick = { onLive(ch.stream, ch.title) },
-                            onLongClick = {},
-                            width = 220.dp,
                             modifier = Modifier.track("s:${ch.name}"),
                         )
                     }

@@ -137,6 +137,48 @@ fun ContinueCard(
     }
 }
 
+/** Live channel: still frame + channel name on the card, the programme title in full under it. */
+@Composable
+fun SportCard(
+    channel: String,
+    image: String?,
+    programme: String?,
+    until: String?,
+    progress: Float,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    width: Dp = 220.dp,
+) {
+    Column(Modifier.width(width)) {
+        Card(
+            onClick = onClick,
+            shape = CardDefaults.shape(cardShape),
+            border = focusBorder(),
+            scale = CardDefaults.scale(focusedScale = 1.05f),
+            modifier = modifier.fillMaxWidth().aspectRatio(16f / 9f),
+        ) {
+            Box(Modifier.fillMaxSize().background(K.surface)) {
+                AsyncImage(image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.9f))))
+                Text(
+                    channel, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium, color = K.text,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 8.dp, vertical = 6.dp),
+                )
+                ProgressLine(progress, Modifier.align(Alignment.BottomStart))
+            }
+        }
+        if (programme != null) {
+            Text(
+                programme, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelMedium, color = K.text,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            until?.let { Text("до $it", style = MaterialTheme.typography.labelSmall, color = K.muted) }
+        }
+    }
+}
+
 @Composable
 fun ProgressLine(progress: Float, modifier: Modifier = Modifier, height: Dp = 4.dp) {
     Box(modifier.fillMaxWidth().height(height).background(Color.White.copy(alpha = 0.18f))) {
