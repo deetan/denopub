@@ -90,6 +90,6 @@ fun TrailerScreen(c: AppContainer, url: String, title: String, onExit: () -> Uni
             Text(title, style = MaterialTheme.typography.headlineSmall, color = K.text,
                 modifier = Modifier.align(Alignment.TopStart).padding(horizontal = K.screenPadH, vertical = 24.dp))
         }
-        error?.let { Text("Трейлер не воспроизводится: $it", color = K.badge, modifier = Modifier.align(Alignment.Center)) }
+        error?.let { Text("Не воспроизводится: $it", color = K.badge, modifier = Modifier.align(Alignment.Center)) }
     }
 }

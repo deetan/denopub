@@ -273,3 +273,18 @@ data class ToggleWatchlistResponse(val watching: kotlinx.serialization.json.Json
 
 @Serializable
 data class ToggleWatchedResponse(val watched: Int? = null)
+
+@Serializable
+data class TvResponse(val channels: List<TvChannel> = emptyList())
+
+@Serializable
+data class TvChannel(
+    val id: Long,
+    val name: String = "",
+    val title: String = "",
+    val logos: TvLogos? = null,
+    val stream: String = "",
+)
+
+@Serializable
+data class TvLogos(val s: String? = null, val m: String? = null)

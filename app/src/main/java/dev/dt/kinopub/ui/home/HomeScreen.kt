@@ -79,10 +79,16 @@ fun HomeScreen(
     onPlay: (ResumeTarget) -> Unit,
     onOpen: (Long) -> Unit,
     onSearch: () -> Unit,
+    onLive: (url: String, title: String) -> Unit,
 ) {
     val vm: HomeViewModel = viewModel(factory = viewModelFactory { initializer { HomeViewModel(c.repository, c.watchNext) } })
     remember { vm.refresh() } // once per visit, before the first read of state
     val state by vm.state.collectAsState()
+    val sport by c.sport.state.collectAsState()
+    // Channels, guide and still frames refresh only while Home is on screen (never during playback).
+    LaunchedEffect(Unit) { c.sport.run() }
+    var minute by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(30_000); minute = System.currentTimeMillis() } }
 
     val firstFocus = remember { FocusRequester() }
     var focusedOnce by remember { mutableStateOf(false) }
@@ -236,6 +242,32 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(K.cardGap),
                     ) {
                         itemsIndexed(entries, key = { _, e -> e.itemId }) { i, e -> card(e, first = r == 0 && i == 0) }
+                    }
+                }
+            }
+        }
+
+        if (sport.channels.isNotEmpty()) item("sport") {
+            Section("Спорт") {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = K.screenPadH),
+                    horizontalArrangement = Arrangement.spacedBy(K.cardGap),
+                ) {
+                    items(sport.channels, key = { it.name }) { ch ->
+                        val now = sport.now(ch, minute)
+                        val progress = now?.let { ((minute - it.start).toFloat() / (it.stop - it.start)).coerceIn(0f, 1f) } ?: 0f
+                        ContinueCard(
+                            title = ch.title,
+                            image = sport.snaps[ch.name]?.let { "file://$it" } ?: ch.logo,
+                            episodeLabel = null,
+                            meta = now?.let { "${it.title} · до ${hhmm(it.stop)}" } ?: "",
+                            progress = progress,
+                            newBadge = null,
+                            onClick = { onLive(ch.stream, ch.title) },
+                            onLongClick = {},
+                            width = 220.dp,
+                            modifier = Modifier.track("s:${ch.name}"),
+                        )
                     }
                 }
             }
@@ -395,3 +427,6 @@ private fun ContinueHero(e: ContinueEntry) {
         }
     }
 }
+
+private fun hhmm(ms: Long): String =
+    java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ms))

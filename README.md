@@ -28,7 +28,12 @@ The player has three levels: ↓ shows the seek bar (← → scrub with a previe
 longer you hold), ↓ again opens one row each for voiceover, subtitles and quality (every option
 visible at once), and ↑ shows a frame-stepping bar on top; ↑ hides each level again. With no
 overlay, ← → jump straight away (3 s, growing to 5 s, 10 s, 30 s, 1 min, 5 min as you keep
-pressing or hold) and show only a "+N с" label. OK pauses; the pause sign shrinks to a corner badge.
+pressing or hold) and show only a "+N с" label. OK pauses; the pause sign shrinks to a corner badge. ↑ enters a frame-stepping mode that stays
+until you leave it with ↓ or Back.
+
+Home has a **Спорт** row: Eurosport, Okko and Match channels from kino.pub's live TV, each with
+what's on now (free iptvx.one XMLTV guide) and a fresh still frame cut from the live stream every
+few minutes while Home is open.
 Track picks are saved per title and applied to the next episode automatically. Playback asks
 kino.pub for HEVC, 4K and HDR streams and uses a SurfaceView so HDR10 and Dolby Vision reach the TV.
 

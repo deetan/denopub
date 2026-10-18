@@ -157,6 +157,9 @@ class KinopubApi(
         post<Unit>(url("device/$deviceId/settings"), settings)
     }
 
+    /** Live TV channels (sport). `current` is always empty — the guide comes from XMLTV. */
+    suspend fun tvChannels(): List<TvChannel> = get<TvResponse>("tv").channels
+
     // ---------- plumbing ----------
 
     private fun url(path: String, vararg q: Pair<String, Any?>): HttpUrl =

@@ -32,6 +32,16 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   "Убрать из «Продолжить»".
 - **Kids** = any genre starting with "мульт" or "детск" ("Семейный", "Аниме" deliberately excluded).
   Flags cached persistently; unknown titles classified in the background after Home renders.
+- **Sport row** (`data/Sport.kt`, `AppContainer.sport`): kino.pub `GET /v1/tv` channels in a fixed
+  lineup — Eurosport 1/2 → Okko Спорт/Прайм/Футбол/Чемпионат → Матч ТВ/Премьер/Арена/Игра/Футбол 1-3
+  (`lineup`: kino.pub `name` → XMLTV id; Матч Премьер is `nashfootball`). Under each: what's on now
+  from the free iptvx.one XMLTV "lite" guide (`epg_lite.xml.gz`, ~15 MB gz / ~170 MB XML, streamed
+  with XmlPullParser, only our channels for −6 h…+36 h kept in `filesDir/epg.json`, refreshed when
+  >12 h old or <3 h ahead). Card picture = a still frame: newest HLS segment, first 700 KB (Range),
+  first keyframe decoded by MediaExtractor+MediaCodec → `filesDir/snaps/<name>-<ts>.jpg` (name
+  changes so Coil reloads). Frames refresh every 5 min, per channel only when stale, and only while
+  Home is composed (`LaunchedEffect { c.sport.run() }`) — never during playback. OK plays the live
+  stream in `TrailerScreen`.
 - **Wishlist** = bookmark folder `Wishlist` (also matches "Хочу посмотреть"), auto-created.
   "New" = not yet focused for 1.5 s on the TV. Removal repeats until `get-item-folders` confirms
   (kino.pub can store duplicates).
@@ -50,10 +60,15 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Progress**: `marktime` every 30 s, on pause and on exit (via `AppContainer.appScope`);
   `toggle?status=1` at the end, then auto-advance (crossing seasons).
 - **Player overlay levels** (rule: ↓ reveals the next level, ↑ hides the current one):
-  NONE → ↑ FINE (top bar; ← → frame-step with EXACT seeks, pauses; hides after 3 s) ·
-  NONE → ↓ OSD (seek bar with white position marker + hints + stats line; ← → scrub with a
-  preview frame from a muted 360p second player, commits ~0.9 s after key-up or on OK) →
-  ↓ TRACKS panel (voiceover / subtitles / quality / next episode; ↑ from its top row → OSD).
+  NONE → ↑ FINE **mode** (top bar; ← → frame-step with EXACT seeks, pauses). Sticky: only ↓ or
+  Back leave it; the bar hides after 3 s idle (`fineBar`) and returns on the next ← →/↑ ·
+  NONE → ↓ OSD (seek bar with white position marker + stats line, **no hint text**; ← → scrub
+  shows just the bar + target time — no preview frame, owner's call — commits ~0.9 s after
+  key-up or on OK) → ↓ TRACKS panel (voiceover / subtitles / quality / next episode; ↑ from its
+  top row → OSD). Focus must land in the panel at once: `TracksPanel` retries `requestFocus`
+  until `hasFocus()` (it used to "succeed" while the panel was still expanding and cost an extra
+  press). Panel open/close is ONE `expandVertically`/`shrinkVertically` — no outer
+  `animateContentSize`, which lagged and made the bar "fall" after the panel vanished.
   NONE → ← → = **quick jump**: seeks at once, no seek bar, only a "+18 с · шаг 5 с" label
   (accumulated offset of the burst). Step grows by step count within a burst (presses < 1.5 s
   apart, or a hold throttled to one step per 220 ms): 3 s ×2 → 5 s ×2 → 10 s ×2 → 30 s ×2 →

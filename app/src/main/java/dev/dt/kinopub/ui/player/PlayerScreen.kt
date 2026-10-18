@@ -5,7 +5,6 @@ import android.view.KeyEvent as AKeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -84,7 +83,8 @@ private fun fineStepMs(heldMs: Long) = when {
 
 /**
  * Remote map:
- *   ↑ (from video)   → FINE: thin top bar, ← → step 0.5 s (held: 1 s, 3 s), pauses; hides in 3 s
+ *   ↑ (from video)   → FINE mode: top bar, ← → step 0.5 s (held: 1 s, 2 s, 5 s), pauses. The mode stays
+ *                      until ↓ or Back; the bar hides after 3 s idle and returns on the next ← →
  *   Rule everywhere: ↓ reveals the next level, ↑ hides the current one
  *   ↓ once           → OSD: seek bar with position marker; ← → scrub with a preview frame, commits
  *                      ~1 s after release or on OK
@@ -127,6 +127,8 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     var scrubHint by remember { mutableStateOf<String?>(null) }
     var scrubReleaseTick by remember { mutableIntStateOf(0) }
     var fineLabel by remember { mutableStateOf("0,5 с") }
+    // FINE is a mode you leave yourself (↓ or Back); only its bar hides when idle.
+    var fineBar by remember { mutableStateOf(true) }
     // When the current ← / → hold started: speed grows with hold time, not with press count.
     var holdStart by remember { mutableLongStateOf(0L) }
     fun held(repeat: Int): Long {
@@ -180,9 +182,9 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
         val next = ((scrubMs ?: pos) + if (forward) step else -step).coerceIn(0, maxOf(dur, 0))
         scrubMs = next
         scrubHint = (if (forward) "+" else "−") + stepLabel(step)
-        vm.previewAt(next)
     }
     fun fine(forward: Boolean, repeat: Int) {
+        fineBar = true
         if (vm.player.playWhenReady) vm.player.pause()
         userPaused = false; bigPause = false
         vm.player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
@@ -206,7 +208,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     LaunchedEffect(overlay, lastInput, scrubMs == null) {
         when (overlay) {
             Overlay.OSD -> if (scrubMs == null) { delay(4_000); if (vm.player.isPlaying) overlay = Overlay.NONE }
-            Overlay.FINE -> { delay(3_000); overlay = Overlay.NONE }
+            Overlay.FINE -> { fineBar = true; delay(3_000); fineBar = false }
             else -> Unit
         }
     }
@@ -231,6 +233,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     BackHandler {
         when {
             overlay == Overlay.TRACKS -> overlay = Overlay.OSD
+            overlay == Overlay.FINE -> overlay = Overlay.NONE
             scrubMs != null -> cancelScrub()
             else -> onExit()
         }
@@ -271,9 +274,9 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                         Overlay.FINE -> when (e.key) {
                             Key.DirectionLeft -> { fine(false, repeat); true }
                             Key.DirectionRight -> { fine(true, repeat); true }
-                            // ↓ reveals, ↑ hides — the same rule on every level.
-                            Key.DirectionUp -> { overlay = Overlay.NONE; true }
-                            Key.DirectionDown -> { overlay = Overlay.OSD; true }
+                            // Sticky: only ↓ (or Back) leaves; ↑ just brings the bar back.
+                            Key.DirectionUp -> { fineBar = true; true }
+                            Key.DirectionDown -> { overlay = Overlay.NONE; true }
                             Key.DirectionCenter, Key.Enter -> { togglePause(); true }
                             else -> false
                         }
@@ -364,7 +367,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
         }
 
         AnimatedVisibility(
-            visible = overlay == Overlay.FINE,
+            visible = overlay == Overlay.FINE && fineBar,
             enter = slideInVertically(tween(220)) { -it } + fadeIn(tween(220)),
             exit = slideOutVertically(tween(180)) { -it } + fadeOut(tween(180)),
             modifier = Modifier.align(Alignment.TopStart),
@@ -378,10 +381,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                 SeekBar(pos, dur, null, emphasized = true)
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Text(clockMs(pos), style = MaterialTheme.typography.titleMedium, color = K.accent)
-                    Text(
-                        "покадрово: ← → по 0,5 с, удерживайте — быстрее ($fineLabel)  ·  OK пауза  ·  ↑ скрыть",
-                        style = MaterialTheme.typography.labelMedium, color = K.muted,
-                    )
+                    Text(fineLabel, style = MaterialTheme.typography.titleMedium, color = K.muted)
                 }
             }
         }
@@ -395,7 +395,6 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .animateContentSize(tween(220))
                     .background(Color.Black.copy(alpha = 0.6f))
                     .padding(horizontal = K.screenPadH, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -404,16 +403,12 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     Text(ui.title, style = MaterialTheme.typography.headlineSmall, color = K.text)
                     ui.episodeLabel?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = K.muted) }
                 }
-                // Preview frame above the scrub marker.
+                // Target time above the scrub marker (no preview frame: the owner wants just the bar).
                 scrubMs?.let { s ->
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val frac = if (dur > 0) (s.toFloat() / dur).coerceIn(0f, 1f) else 0f
-                        val w = 320.dp
-                        Column(Modifier.padding(start = (maxWidth - w) * frac), horizontalAlignment = Alignment.CenterHorizontally) {
-                            AndroidView(
-                                factory = { ctx -> android.view.TextureView(ctx).also { tv -> vm.previewPlayer()?.setVideoTextureView(tv) } },
-                                modifier = Modifier.width(w).height(180.dp).clip(RoundedCornerShape(6.dp)).background(Color.Black),
-                            )
+                        val w = 120.dp
+                        Box(Modifier.padding(start = (maxWidth - w) * frac).width(w), contentAlignment = Alignment.Center) {
                             Text(clock(s), style = MaterialTheme.typography.titleMedium, color = K.accent)
                         }
                     }
@@ -425,19 +420,16 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     Text("−" + clock((dur - pos).coerceAtLeast(0)), style = MaterialTheme.typography.labelMedium, color = K.muted)
                 }
                 if (overlay == Overlay.OSD) {
-                    Text(
-                        if (scrubMs != null) "← →  выбрать момент (удерживайте — быстрее)  ·  отпустите или OK — перейти  ·  Back — отмена"
-                        else "← →  перемотка с превью  ·  ↓ — озвучка, субтитры, качество  ·  ↑ — покадрово",
-                        style = MaterialTheme.typography.labelMedium, color = K.muted,
-                    )
                     if (stats.isNotEmpty()) Text(stats, style = MaterialTheme.typography.labelMedium, color = K.muted.copy(alpha = 0.8f))
                 }
                 AnimatedVisibility(
                     visible = overlay == Overlay.TRACKS,
-                    enter = expandVertically(tween(240), expandFrom = Alignment.Top) + fadeIn(tween(240)),
-                    exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top) + fadeOut(tween(160)),
+                    // One motion: the panel grows/shrinks and the bar rides with it (an outer
+                    // animateContentSize used to lag behind, so the bar "fell" after the panel vanished).
+                    enter = expandVertically(tween(200), expandFrom = Alignment.Top),
+                    exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top),
                 ) {
-                    TracksPanel(vm, ui, panelFocusTick, onFocusInside = { panelHasFocus = it }, onExitUp = { overlay = Overlay.OSD })
+                    TracksPanel(vm, ui, panelFocusTick, hasFocus = { panelHasFocus }, onFocusInside = { panelHasFocus = it }, onExitUp = { overlay = Overlay.OSD })
                 }
             }
         }
@@ -498,16 +490,19 @@ private fun TracksPanel(
     vm: PlayerController,
     ui: PlayerUi,
     focusTick: Int,
+    hasFocus: () -> Boolean,
     onFocusInside: (Boolean) -> Unit,
     onExitUp: () -> Unit,
 ) {
     val audioFocus = remember { FocusRequester() }
     val firstFocus = remember { FocusRequester() }
     // Focus the current voiceover (its row scrolls to it first); fall back to the first chip.
+    // requestFocus() can "succeed" before the chips are placed (the panel is still expanding),
+    // which used to cost an extra key press: keep asking until focus is really inside.
     LaunchedEffect(focusTick) {
-        repeat(15) {
-            if (runCatching { audioFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-            if (it > 5 && runCatching { firstFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+        repeat(30) {
+            if (hasFocus()) return@LaunchedEffect
+            runCatching { if (it < 10) audioFocus.requestFocus() else firstFocus.requestFocus() }
             delay(40)
         }
     }

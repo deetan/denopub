@@ -185,6 +185,17 @@ App's "Буду смотреть" is just a bookmark folder found by title [film
 - `voiceover-author` -> `[{id,title,short_title}]`.
 - `video-quality` -> `[{id,title:"480p",quality:480},{id:2,title:"720p"},...]`.
 
+## 9a. Live TV — `GET /v1/tv` (verified 2026-10-18)
+
+`{status, channels:[{id, name, title, logos:{s,m}, stream, embed, current, playlist, status}]}`.
+`/v1/tv/index` (what Kodi calls) returns the same. ~50 sport channels (Eurosport 1/2, Okko ×4,
+Match ×7, Sky, TNT, ESPN, Setanta…). `stream` = `https://edge-01.mycdn.video/<name>/index.m3u8?token=…`
+— a one-variant master (1080p H.264, ~6.5 Mbit/s) → `media.m3u8` → 6 s MPEG-TS segments; plain
+HTTPS, plays in ExoPlayer as-is. `current` is **always empty**: no guide from kino.pub — the app uses
+the iptvx.one XMLTV feed (`https://iptvx.one/epg/epg_lite.xml.gz`; ids like `eurosport1`,
+`okko-sport`, `okko-sport-2` = Окко Прайм, `match-premier`, `match-football1`). Fallbacks:
+programtv.ru (`/xmltv.xml.gz`, 0.9 MB, Match + Окко.Спорт only, no Eurosport); epg.pw times are wrong.
+
 ## 10. Suggested client flow for Android TV 4K/HDR
 
 1. OAuth device flow -> store tokens (refresh 30 d).

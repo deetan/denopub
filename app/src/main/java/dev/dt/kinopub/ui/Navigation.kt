@@ -73,6 +73,7 @@ fun KinoNavHost(c: AppContainer) {
                     onPlay = { nav.navigate(Routes.player(it)) },
                     onOpen = { nav.navigate(Routes.details(it)) },
                     onSearch = { nav.navigate(Routes.SEARCH) },
+                    onLive = { url, title -> nav.navigate(Routes.trailer(url, title)) },
                 )
             }
             composable(Routes.SEARCH) {
