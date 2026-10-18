@@ -139,6 +139,7 @@ optimized for "resume what I'm watching in one click". Read in order:
   `adb logcat -s denopub | grep continue:` lists candidates and why each one was dropped.
 - Player overlays animate (slide from top/bottom, panel expands); scrub and fine steps accelerate by
   **hold time** (scrub 10 s→30 s→1 min→2 min→5 min, fine 0.5→1→2→5 s).
+- Title card long-press: on an episode toggles "просмотрено" at once; on a season chip toggles the whole season. Trailer chips use short labels ("Трейлер S2", "Тизер S3") so the row fits.
 - **Title card**: Russian plot (kino.pub) + English plot and trailers/teasers from IMDb
   (`data/api/ImdbClient.kt`, unofficial GraphQL `caching.graphql.imdb.com`; imdb.com HTML is behind
   an anti-bot wall) + kino.pub trailer (`items/trailer`). Trailers play in `TrailerScreen`.

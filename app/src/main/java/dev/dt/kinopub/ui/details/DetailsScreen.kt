@@ -217,7 +217,7 @@ fun DetailsScreen(
                             onClick = { onTrailer(t.url, "$titleRu — ${t.name}") },
                             modifier = if (i == 0) Modifier.focusRequester(trailerFocus) else Modifier,
                         ) {
-                            Text("▶ ${t.name}" + (t.seconds?.let { s -> " · ${s / 60}:${"%02d".format(s % 60)}" } ?: ""), maxLines = 1)
+                            Text("▶ ${shortTrailerName(t.name)}" + (t.seconds?.let { s -> " · ${s / 60}:${"%02d".format(s % 60)}" } ?: ""), maxLines = 1)
                         }
                     }
                 }
@@ -229,8 +229,15 @@ fun DetailsScreen(
                     items(it.seasons, key = { s -> s.number }) { s ->
                         val left = s.episodes.count { e -> e.watching?.status != 1 }
                         val label = "Сезон ${s.number}" + if (left == 0) " ✓" else ""
-                        if (s.number == season) Button(onClick = { season = s.number }) { Text(label) }
-                        else OutlinedButton(onClick = { season = s.number }) { Text(label) }
+                        // Long-press: mark the whole season watched (or unwatched if it already is).
+                        val toggleSeason = {
+                            val done = left == 0
+                            act(if (done) "Сезон ${s.number}: отметка снята" else "Сезон ${s.number} просмотрен") {
+                                c.repository.setSeasonWatched(it.id, s.number, !done)
+                            }
+                        }
+                        if (s.number == season) Button(onClick = { season = s.number }, onLongClick = toggleSeason) { Text(label) }
+                        else OutlinedButton(onClick = { season = s.number }, onLongClick = toggleSeason) { Text(label) }
                     }
                 }
                 val episodes = it.seasons.firstOrNull { s -> s.number == season }?.episodes.orEmpty()
@@ -245,7 +252,15 @@ fun DetailsScreen(
                             e,
                             isResume = resume?.season == season && resume?.episode == e.number,
                             onClick = { onPlay(ResumeTarget(it.id, season, e.number, resumeSec(e))) },
-                            onLongClick = { season?.let { s -> episodeMenu(s, e) } },
+                            // Long-press: toggle "просмотрено" right away (no menu).
+                            onLongClick = {
+                                season?.let { s ->
+                                    val watched = e.watching?.status == 1
+                                    act(if (watched) "S$s·E${e.number}: отметка снята" else "S$s·E${e.number} просмотрена") {
+                                        c.repository.setEpisodeWatched(it.id, s, e.number, !watched)
+                                    }
+                                }
+                            },
                         )
                     }
                 }
@@ -263,6 +278,19 @@ fun DetailsScreen(
 }
 
 private data class TrailerChip(val name: String, val seconds: Int?, val url: String)
+
+/** "Silo | Official Trailer - Season 2" → "Трейлер S2"; keeps chips short enough to fit a row. */
+private fun shortTrailerName(raw: String): String {
+    if (raw.contains("kino.pub")) return raw
+    val n = raw.substringAfterLast(" | ")
+    val season = Regex("Season (\\d+)", RegexOption.IGNORE_CASE).find(n)?.groupValues?.get(1)
+    val kind = when {
+        n.contains("teaser", true) -> "Тизер"
+        n.contains("trailer", true) || n.contains("трейлер", true) -> "Трейлер"
+        else -> n.take(18)
+    }
+    return kind + (season?.let { " S$it" } ?: "")
+}
 
 /** kino.pub's marktime stores time without changing status, so "in progress" = time > 0, not finished. */
 private fun resumeSec(v: Video): Int = v.watching?.takeIf { it.status != 1 }?.time ?: 0
