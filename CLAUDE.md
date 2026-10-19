@@ -123,8 +123,16 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   channel). Use `Sport.attempt`, which rethrows cancellation.
 - Sport frames older than 15 min are not shown (logo instead), and a failed grab drops the frame.
 - Search hides kino.pub type `3D` items (owner: no 3D on the TV) — `Repository.search`.
-- iptvx `eurosport1`/`eurosport2` may be a different regional feed than kino.pub's Eurosport
-  (2026-10-19: frame showed snooker while the guide said cycling; Eurosport 2 had no entry now).
+- **Eurosport guide**: kino.pub carries the European feed, whose times match iptvx `eurosport1-pl`/
+  `eurosport2-pl`. iptvx's Russian `eurosport1`/`eurosport2` list the same shows **shifted by a
+  whole hour** (and with gaps), so they only lend Russian titles: `Sport.withTitlesFrom` finds the
+  shift that lines up the most starts (self-calibrating across DST) and falls back to the Polish
+  title. Verified against live frames 2026-10-19. `EpgCache.version` forces a re-download when
+  the stored ids change.
+- **Snapshot decoding**: software decoder preferred (`isSoftwareOnly`), so frames never touch the
+  HW decoder. Android's TS `MediaExtractor` doesn't see the video of **interlaced** streams
+  (Eurosport 2 is 1080i — it reported 1 track, audio): `Sport.videoPes` demuxes the H.264 PES
+  itself as a fallback. `decode …: in= out=` log lines explain a "no frame".
 - **Gradle**: Homebrew's `gradle` is 9.x and can't run `wrapper` in this project (AGP 8 uses an
   API removed in Gradle 9.6). Always `./gradlew` (8.14.3).
 - **JDK**: use `openjdk@21` (keg-only). Don't add `jvmToolchain(17)` — no JDK 17 installed.

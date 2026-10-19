@@ -42,8 +42,9 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
 
     /** kino.pub channel `name` → iptvx.one XMLTV channel id, in row order. */
     private val lineup = listOf(
-        "eurosport1" to "eurosport1",
-        "eurosport2" to "eurosport2",
+        // kino.pub carries the European Eurosport feed: the Polish listing has the right times.
+        "eurosport1" to "eurosport1-pl",
+        "eurosport2" to "eurosport2-pl",
         "okkosport" to "okko-sport",
         "okkoprime" to "okko-sport-2",
         "okkofootball" to "okko-football",
@@ -56,6 +57,13 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
         "football2" to "match-football2",
         "football3" to "match-football3",
     )
+
+    /**
+     * Russian titles for feeds whose own listing isn't Russian. iptvx's Russian Eurosport listing
+     * has the same programmes but shifted by a whole hour (and gaps), so it only lends titles:
+     * see [withTitlesFrom].
+     */
+    private val titleSources = mapOf("eurosport1-pl" to "eurosport1", "eurosport2-pl" to "eurosport2")
 
     private val http = http.newBuilder().readTimeout(120, TimeUnit.SECONDS).build()
     private val json = Json { ignoreUnknownKeys = true }
@@ -110,8 +118,8 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
         val now = System.currentTimeMillis()
         val cached = loadEpg()
         val reaches = cached?.progs?.values?.flatten()?.maxOfOrNull { it.stop } ?: 0L
-        if (cached != null && now - cached.fetchedAt < 12 * HOUR && reaches > now + 3 * HOUR) return@withLock
-        val wanted = lineup.map { it.second }.toSet()
+        if (cached != null && cached.version == EPG_VERSION && now - cached.fetchedAt < 12 * HOUR && reaches > now + 3 * HOUR) return@withLock
+        val wanted = lineup.map { it.second }.toSet() + titleSources.values
         val t0 = System.currentTimeMillis()
         val progs = withContext(Dispatchers.IO) {
             http.newCall(Request.Builder().url(EPG_URL).build()).execute().use { resp ->
@@ -120,10 +128,27 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
                 parseXmltv(GZIPInputStream(resp.body!!.byteStream(), 64 * 1024), wanted, now - 6 * HOUR, now + 36 * HOUR)
             }
         }
-        val cache = EpgCache(now, progs)
+        val merged = progs.filterKeys { it !in titleSources.values }.mapValues { (id, list) ->
+            titleSources[id]?.let { progs[it] }?.let { withTitlesFrom(list, it) } ?: list
+        }
+        val cache = EpgCache(now, merged, EPG_VERSION)
         epgFile.writeText(json.encodeToString(EpgCache.serializer(), cache))
         Log.i(TAG, "epg: ${progs.values.sumOf { it.size }} programmes for ${progs.size} channels in ${System.currentTimeMillis() - t0} ms")
-        _state.update { it.copy(epg = progs) }
+        _state.update { it.copy(epg = merged) }
+    }
+
+    /**
+     * Keep [timing]'s slots, take titles from [titles] after finding the whole shift between the
+     * two listings (the one that lines up the most programme starts). No match → own title.
+     */
+    private fun withTitlesFrom(timing: List<Programme>, titles: List<Programme>): List<Programme> {
+        val starts = timing.map { it.start }.toSet()
+        val shift = (-6..6).map { it * HOUR / 2 }
+            .map { off -> off to titles.count { it.start + off in starts } }
+            .filter { it.second >= 2 }.maxByOrNull { it.second }?.first
+            ?: return timing
+        val byStart = titles.associateBy { it.start + shift }
+        return timing.map { p -> byStart[p.start]?.let { p.copy(title = it.title) } ?: p }
     }
 
     private fun parseXmltv(input: InputStream, wanted: Set<String>, from: Long, to: Long): Map<String, List<Programme>> {
@@ -190,6 +215,7 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
         }
         val out = File(snapDir, "${ch.name}-${System.currentTimeMillis()}.jpg")
         val ok = runCatching { decodeFirstFrame(ts, out) }.onFailure { Log.w(TAG, "decode ${ch.name}: $it") }.getOrDefault(false)
+        Log.i(TAG, "snap ${ch.name}: ${if (ok) "ok ${out.length() / 1024} KB" else "no frame"} (segment ${ts.length() / 1024} KB)")
         ts.delete()
         if (!ok) return@withContext null
         snapDir.listFiles().orEmpty().filter { it.name.startsWith("${ch.name}-") && it != out }.forEach { it.delete() }
@@ -199,14 +225,26 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
     private fun decodeFirstFrame(ts: File, out: File): Boolean {
         val ex = MediaExtractor()
         var codec: MediaCodec? = null
+        var inputs = 0
+        var outputs = 0
+        var why = "timeout"
         try {
             ex.setDataSource(ts.path)
             val track = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }
-                ?: return false
-            ex.selectTrack(track)
-            val format = ex.getTrackFormat(track)
+            // Android's TS extractor misses the video of interlaced streams (Eurosport 2 is 1080i):
+            // then demux the H.264 ourselves, one PES = one access unit, SPS/PPS in-band.
+            val pes = if (track == null) videoPes(ts.readBytes()) else null
+            if (track == null && pes.isNullOrEmpty()) { why = "no video track of ${ex.trackCount}"; return false }
+            if (track != null) ex.selectTrack(track)
+            val format = if (track != null) ex.getTrackFormat(track) else MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1920, 1080)
+            var next = 0
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
-            codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+            val mime = format.getString(MediaFormat.KEY_MIME)!!
+            // Software decoder first: the Chromecast's hardware one returns no image for
+            // interlaced 1080i (Eurosport 2), and this way snapshots never touch the HW decoder.
+            val sw = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
+                .firstOrNull { !it.isEncoder && it.isSoftwareOnly && it.supportedTypes.any { t -> t.equals(mime, true) } }
+            codec = sw?.let { MediaCodec.createByCodecName(it.name) } ?: MediaCodec.createDecoderByType(mime)
             codec.configure(format, null, null, 0)
             codec.start()
             val info = MediaCodec.BufferInfo()
@@ -216,15 +254,20 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
                 if (!inputDone) {
                     val i = codec.dequeueInputBuffer(10_000)
                     if (i >= 0) {
-                        val n = ex.readSampleData(codec.getInputBuffer(i)!!, 0)
+                        val buf = codec.getInputBuffer(i)!!
+                        val n = if (pes == null) ex.readSampleData(buf, 0)
+                        else pes.getOrNull(next)?.takeIf { it.size <= buf.capacity() }?.let { buf.put(it); it.size } ?: -1
+                        val t = if (pes == null) ex.sampleTime else next * 40_000L
                         if (n < 0) { codec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM); inputDone = true }
-                        else { codec.queueInputBuffer(i, 0, n, ex.sampleTime, 0); ex.advance() }
+                        else { codec.queueInputBuffer(i, 0, n, t, 0); if (pes == null) ex.advance() else next++; inputs++ }
                     }
                 }
                 val o = codec.dequeueOutputBuffer(info, 10_000)
                 if (o >= 0) {
+                    outputs++
                     if (info.size > 0) {
                         val img = codec.getOutputImage(o)
+                        if (img == null) why = "image null"
                         if (img != null) {
                             img.use { writeJpeg(it, out) }
                             codec.releaseOutputBuffer(o, false)
@@ -232,15 +275,64 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
                         }
                     }
                     codec.releaseOutputBuffer(o, false)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return false
+                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) { if (why == "timeout") why = "eos"; return false }
                 }
             }
             return false
         } finally {
+            if (outputs == 0 || why != "timeout") Log.i(TAG, "decode ${codec?.name}: in=$inputs out=$outputs $why")
             runCatching { codec?.stop() }
             runCatching { codec?.release() }
             ex.release()
         }
+    }
+
+    /** Payloads of the H.264 PES packets in an MPEG-TS file (PAT → PMT → stream type 0x1B). */
+    private fun videoPes(b: ByteArray): List<ByteArray> {
+        var pmtPid = -1
+        var videoPid = -1
+        val out = mutableListOf<ByteArray>()
+        var cur: java.io.ByteArrayOutputStream? = null
+        var off = 0
+        while (off + 188 <= b.size) {
+            if (b[off] != 0x47.toByte()) { off++; continue }
+            val pusi = b[off + 1].toInt() and 0x40 != 0
+            val pid = ((b[off + 1].toInt() and 0x1f) shl 8) or (b[off + 2].toInt() and 0xff)
+            val afc = (b[off + 3].toInt() shr 4) and 3
+            var p = off + 4
+            if (afc == 2 || afc == 3) p += 1 + (b[p].toInt() and 0xff)
+            val end = off + 188
+            if (afc != 2 && p < end) when {
+                pid == 0 && pusi -> {
+                    p += 1 + (b[p].toInt() and 0xff) // pointer field
+                    pmtPid = ((b[p + 10].toInt() and 0x1f) shl 8) or (b[p + 11].toInt() and 0xff)
+                }
+                pid == pmtPid && pusi && videoPid < 0 -> {
+                    p += 1 + (b[p].toInt() and 0xff)
+                    val secLen = ((b[p + 1].toInt() and 0x0f) shl 8) or (b[p + 2].toInt() and 0xff)
+                    val infoLen = ((b[p + 10].toInt() and 0x0f) shl 8) or (b[p + 11].toInt() and 0xff)
+                    var q = p + 12 + infoLen
+                    val secEnd = minOf(p + 3 + secLen - 4, end)
+                    while (q + 5 <= secEnd) {
+                        val type = b[q].toInt() and 0xff
+                        val epid = ((b[q + 1].toInt() and 0x1f) shl 8) or (b[q + 2].toInt() and 0xff)
+                        if (type == 0x1b) { videoPid = epid; break }
+                        q += 5 + (((b[q + 3].toInt() and 0x0f) shl 8) or (b[q + 4].toInt() and 0xff))
+                    }
+                }
+                pid == videoPid -> {
+                    if (pusi) {
+                        cur?.let { out += it.toByteArray() }
+                        cur = java.io.ByteArrayOutputStream()
+                        p += 9 + (b[p + 8].toInt() and 0xff) // PES header
+                    }
+                    if (p < end) cur?.write(b, p, end - p)
+                }
+            }
+            off = end
+        }
+        // The last PES is cut off by the byte range: drop it.
+        return out
     }
 
     /** YUV_420_888 (any strides) → NV21 → JPEG, shrunk ×2 to keep files small. */
@@ -280,6 +372,7 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
         private const val SNAP_EVERY_MS = 5 * 60_000L
         private const val SNAP_BYTES = 700_000L
         // Free XMLTV guide with every channel above (lite = no descriptions). See docs/kinopub-api.md.
+        private const val EPG_VERSION = 2 // bump when the stored ids/merge change
         private const val EPG_URL = "https://iptvx.one/epg/epg_lite.xml.gz"
     }
 }
@@ -299,4 +392,4 @@ data class SportChannel(val id: Long, val name: String, val title: String, val l
 data class Programme(val start: Long, val stop: Long, val title: String)
 
 @Serializable
-data class EpgCache(val fetchedAt: Long, val progs: Map<String, List<Programme>>)
+data class EpgCache(val fetchedAt: Long, val progs: Map<String, List<Programme>>, val version: Int = 1)

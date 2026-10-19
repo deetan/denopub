@@ -192,7 +192,8 @@ App's "Буду смотреть" is just a bookmark folder found by title [film
 Match ×7, Sky, TNT, ESPN, Setanta…). `stream` = `https://edge-01.mycdn.video/<name>/index.m3u8?token=…`
 — a one-variant master (1080p H.264, ~6.5 Mbit/s) → `media.m3u8` → 6 s MPEG-TS segments; plain
 HTTPS, plays in ExoPlayer as-is. `current` is **always empty**: no guide from kino.pub — the app uses
-the iptvx.one XMLTV feed (`https://iptvx.one/epg/epg_lite.xml.gz`; ids like `eurosport1`,
+the iptvx.one XMLTV feed (`https://iptvx.one/epg/epg_lite.xml.gz`; Eurosport times from
+`eurosport1-pl`/`eurosport2-pl` — the Russian `eurosport1`/`eurosport2` run an hour off; ids like
 `okko-sport`, `okko-sport-2` = Окко Прайм, `match-premier`, `match-football1`). Fallbacks:
 programtv.ru (`/xmltv.xml.gz`, 0.9 MB, Match + Окко.Спорт only, no Eurosport); epg.pw times are wrong.
 
