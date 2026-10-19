@@ -312,7 +312,11 @@ class Repository(
 
     suspend fun search(query: String, type: String?): List<Item> =
         // 3D releases are separate items (type "3D") the owner never wants: no 3D on the TV.
-        api.search(query).items.filter { !it.type.equals("3D", ignoreCase = true) && (type == null || matchesType(it, type)) }
+        api.search(query).items.filter { item ->
+            val is3d = item.type.equals("3D", ignoreCase = true)
+            if (is3d) android.util.Log.i("denopub", "search: hid 3D ${item.id} ${item.title}")
+            !is3d && (type == null || matchesType(item, type))
+        }
 
     private fun matchesType(item: Item, type: String) = when (type) {
         "serial" -> item.type in Item.SERIAL_TYPES
