@@ -82,12 +82,20 @@ class Repository(
 
     private var wishlistFolderId: Long? = null
 
+    /**
+     * A part that fails — or comes back empty, which is what a sleeping Chromecast's dead network
+     * looks like — keeps its previous content. Once an offline load wiped Home down to the Sport
+     * row and saved that over the cache.
+     */
     suspend fun home(): HomeData = coroutineScope {
-        val cont = async { runCatching { continueWatching() }.getOrDefault(emptyList()) }
-        val wish = async { runCatching { wishlist() }.getOrDefault(emptyList()) }
-        val fm = async { runCatching { api.fresh("movie").items }.getOrDefault(emptyList()) }
-        val fs = async { runCatching { api.fresh("serial").items }.getOrDefault(emptyList()) }
-        val hot = async { runCatching { api.hot("movie").items }.getOrDefault(emptyList()) }
+        val prev = cachedHome()
+        suspend fun <T> part(old: List<T>?, load: suspend () -> List<T>): List<T> =
+            runCatching { load() }.getOrNull()?.takeIf { it.isNotEmpty() } ?: old.orEmpty()
+        val cont = async { part(prev?.continueWatching) { continueWatching() } }
+        val wish = async { part(prev?.wishlist) { wishlist() } }
+        val fm = async { part(prev?.freshMovies) { api.fresh("movie").items } }
+        val fs = async { part(prev?.freshSerials) { api.fresh("serial").items } }
+        val hot = async { part(prev?.hot) { api.hot("movie").items } }
         HomeData(cont.await(), wish.await(), fm.await(), fs.await(), hot.await()).also(::saveHome)
     }
 

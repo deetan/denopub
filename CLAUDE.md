@@ -121,6 +121,11 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 
 ## Gotchas & known issues
 
+- **A sleeping Chromecast has no network.** An install/launch while it slept made every Home call
+  fail, Home saved that empty result over `home.json`, and after wake-up only the Sport row was
+  left (focus stranded on «Поиск»). Now `Repository.home()` keeps a part's previous content when
+  it fails *or comes back empty*, and Home reloads on every return to the foreground
+  (`repeatOnLifecycle(STARTED)`, skipping the first start).
 - **Never `runCatching` inside a loop tied to a composition**: it swallows `CancellationException`,
   so leaving Home kept `Sport.run()` spinning ("The coroutine scope left the composition" per
   channel). Use `Sport.attempt`, which rethrows cancellation.

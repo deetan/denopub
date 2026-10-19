@@ -90,6 +90,15 @@ fun HomeScreen(
     // Only while the app is actually visible: Home stays composed when the app is in the
     // background (TV off), and the loop used to keep fetching frames there.
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    // Back in the foreground (TV switched on, app reopened): reload Home. The first start is
+    // already covered by the refresh above.
+    LaunchedEffect(Unit) {
+        var first = true
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            if (!first) vm.refresh()
+            first = false
+        }
+    }
     LaunchedEffect(Unit) { lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { c.sport.run() } }
     // Focused sport card plays its channel live, muted, after a short dwell (not while flying by).
     val preview = rememberLivePreview(c.http)
