@@ -30,6 +30,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.tv.material3.OutlinedButton
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,7 +87,25 @@ fun HomeScreen(
     val state by vm.state.collectAsState()
     val sport by c.sport.state.collectAsState()
     // Channels, guide and still frames refresh only while Home is on screen (never during playback).
-    LaunchedEffect(Unit) { c.sport.run() }
+    // Only while the app is actually visible: Home stays composed when the app is in the
+    // background (TV off), and the loop used to keep fetching frames there.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(Unit) { lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { c.sport.run() } }
+    // Focused sport card plays its channel live, muted, after a short dwell (not while flying by).
+    val preview = rememberLivePreview(c.http)
+    var focusedSport by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(focusedSport) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            try {
+                val ch = sport.channels.firstOrNull { it.name == focusedSport } ?: return@repeatOnLifecycle
+                kotlinx.coroutines.delay(700)
+                preview.show(ch.name, ch.stream)
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                preview.show(null, null)
+            }
+        }
+    }
     var minute by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(30_000); minute = System.currentTimeMillis() } }
 
@@ -265,7 +284,13 @@ fun HomeScreen(
                             until = now?.let { hhmm(it.stop) },
                             progress = progress,
                             onClick = { onLive(ch.stream, ch.title) },
-                            modifier = Modifier.track("s:${ch.name}"),
+                            live = if (preview.playing == ch.name) { { LivePreviewSurface(preview) } } else null,
+                            modifier = Modifier
+                                .onFocusChanged {
+                                    if (it.isFocused) focusedSport = ch.name
+                                    else if (focusedSport == ch.name) focusedSport = null
+                                }
+                                .track("s:${ch.name}"),
                         )
                     }
                 }

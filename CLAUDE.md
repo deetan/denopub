@@ -40,8 +40,11 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   >12 h old or <3 h ahead). Card picture = a still frame: newest HLS segment, first 700 KB (Range),
   first keyframe decoded by MediaExtractor+MediaCodec → `filesDir/snaps/<name>-<ts>.jpg` (name
   changes so Coil reloads). Frames refresh every 5 min, per channel only when stale, and only while
-  Home is composed (`LaunchedEffect { c.sport.run() }`) — never during playback. OK plays the live
-  stream in `TrailerScreen`. `SportCard` (`ui/common/Cards.kt`): channel name on the frame, the
+  Home is composed **and the app is STARTED** (`repeatOnLifecycle`) — never during playback or with
+  the TV off (Home stays composed in the background; it used to keep fetching). OK plays the live
+  stream in `TrailerScreen`. **Live preview** (`ui/home/LivePreview.kt`): the focused sport card
+  plays its channel muted in a TextureView after a 0.7 s dwell; one shared ExoPlayer, audio track
+  type disabled, stopped on blur / app stop; the still frame stays until `onRenderedFirstFrame`. `SportCard` (`ui/common/Cards.kt`): channel name on the frame, the
   programme title in full under the card (up to 3 lines) + "до HH:mm" — the owner wants the whole title.
 - **Wishlist** = bookmark folder `Wishlist` (also matches "Хочу посмотреть"), auto-created.
   "New" = not yet focused for 1.5 s on the TV. Removal repeats until `get-item-folders` confirms

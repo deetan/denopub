@@ -33,7 +33,7 @@ until you leave it with ↓ or Back.
 
 Home has a **Спорт** row: Eurosport, Okko and Match channels from kino.pub's live TV, each with
 what's on now (free iptvx.one XMLTV guide) and a fresh still frame cut from the live stream every
-few minutes while Home is open.
+few minutes while Home is open; the focused channel plays live, muted, right in its card.
 Track picks are saved per title and applied to the next episode automatically. Playback asks
 kino.pub for HEVC, 4K and HDR streams and uses a SurfaceView so HDR10 and Dolby Vision reach the TV.
 

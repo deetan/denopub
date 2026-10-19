@@ -54,6 +54,8 @@ Verified on the real Chromecast by the owner:
    (EPG parse time on the Chromecast and whether MediaCodec gives a YUV image are the unknowns).
 1b. Eurosport guide fixed 2026-10-19 (Polish times + Russian titles, see CLAUDE.md gotchas);
    Eurosport 2 frames fixed (interlaced → own TS demux). All 13 cards verified on the TV.
+   Live muted preview in the focused card added 2026-10-19 — **not yet seen on the TV** (it was
+   asleep); the player initialises without errors. Check it first next time.
 2. **Player controls reworked 2026-10-18** (owner disliked scrubbing and the pause overlay):
    quick jump with a "+N с" label, progressive steps, fading pause sign, no pause sign while frame
    stepping. Deployed to the TV, not yet tested by the owner, who has more player feedback to

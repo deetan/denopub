@@ -148,6 +148,7 @@ fun SportCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     width: Dp = 220.dp,
+    live: (@Composable () -> Unit)? = null, // muted live picture over the still frame
 ) {
     Column(Modifier.width(width)) {
         Card(
@@ -159,6 +160,7 @@ fun SportCard(
         ) {
             Box(Modifier.fillMaxSize().background(K.surface)) {
                 AsyncImage(image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                live?.invoke()
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.9f))))
                 Text(
                     channel, maxLines = 1, overflow = TextOverflow.Ellipsis,
