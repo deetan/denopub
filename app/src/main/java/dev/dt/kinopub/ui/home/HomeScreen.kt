@@ -258,7 +258,9 @@ fun HomeScreen(
                         val progress = now?.let { ((minute - it.start).toFloat() / (it.stop - it.start)).coerceIn(0f, 1f) } ?: 0f
                         dev.dt.kinopub.ui.common.SportCard(
                             channel = ch.title,
-                            image = sport.snaps[ch.name]?.let { "file://$it" } ?: ch.logo,
+                            // Only a recent frame; a stale one would show what was on hours ago.
+                            image = sport.snaps[ch.name]?.takeIf { minute - java.io.File(it).lastModified() < 15 * 60_000 }
+                                ?.let { "file://$it" } ?: ch.logo,
                             programme = now?.title,
                             until = now?.let { hhmm(it.stop) },
                             progress = progress,

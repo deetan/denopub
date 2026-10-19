@@ -311,7 +311,8 @@ class Repository(
     }
 
     suspend fun search(query: String, type: String?): List<Item> =
-        api.search(query).items.filter { type == null || matchesType(it, type) }
+        // 3D releases are separate items (type "3D") the owner never wants: no 3D on the TV.
+        api.search(query).items.filter { !it.type.equals("3D", ignoreCase = true) && (type == null || matchesType(it, type)) }
 
     private fun matchesType(item: Item, type: String) = when (type) {
         "serial" -> item.type in Item.SERIAL_TYPES

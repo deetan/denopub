@@ -52,6 +52,8 @@ Verified on the real Chromecast by the owner:
    + still frames. Verified on the TV 2026-10-18: 13 channels, guide parse 13 s on the Chromecast,
    frames decode, live playback works. Check `adb logcat -s denopub | grep -E "sport|epg|snap|decode"`
    (EPG parse time on the Chromecast and whether MediaCodec gives a YUV image are the unknowns).
+1b. **Eurosport guide may not match** kino.pub's Eurosport feed (see CLAUDE.md gotchas). Okko and
+   Match matched. Candidates: other iptvx ids (`eurosport-4k`, `eurosport1-pl`…), programtv.ru, it999.
 2. **Player controls reworked 2026-10-18** (owner disliked scrubbing and the pause overlay):
    quick jump with a "+N с" label, progressive steps, fading pause sign, no pause sign while frame
    stepping. Deployed to the TV, not yet tested by the owner, who has more player feedback to

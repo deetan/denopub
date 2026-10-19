@@ -118,6 +118,13 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 
 ## Gotchas & known issues
 
+- **Never `runCatching` inside a loop tied to a composition**: it swallows `CancellationException`,
+  so leaving Home kept `Sport.run()` spinning ("The coroutine scope left the composition" per
+  channel). Use `Sport.attempt`, which rethrows cancellation.
+- Sport frames older than 15 min are not shown (logo instead), and a failed grab drops the frame.
+- Search hides kino.pub type `3D` items (owner: no 3D on the TV) — `Repository.search`.
+- iptvx `eurosport1`/`eurosport2` may be a different regional feed than kino.pub's Eurosport
+  (2026-10-19: frame showed snooker while the guide said cycling; Eurosport 2 had no entry now).
 - **Gradle**: Homebrew's `gradle` is 9.x and can't run `wrapper` in this project (AGP 8 uses an
   API removed in Gradle 9.6). Always `./gradlew` (8.14.3).
 - **JDK**: use `openjdk@21` (keg-only). Don't add `jvmToolchain(17)` — no JDK 17 installed.

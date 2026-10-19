@@ -68,18 +68,28 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
 
     /** Runs while Home is on screen: channels once, guide when stale, frames every few minutes. */
     suspend fun run() = coroutineScope {
-        launch { runCatching { ensureEpg() }.onFailure { Log.w(TAG, "epg failed", it) } }
+        launch { attempt("epg") { ensureEpg() } }
         while (true) {
-            if (_state.value.channels.isEmpty()) runCatching { loadChannels() }.onFailure { Log.w(TAG, "tv failed", it) }
+            if (_state.value.channels.isEmpty()) attempt("tv") { loadChannels() }
             for (ch in _state.value.channels) {
                 // Coming back to Home doesn't re-fetch frames that are still fresh.
                 val age = System.currentTimeMillis() - (_state.value.snaps[ch.name]?.let { File(it).lastModified() } ?: 0L)
                 if (age < SNAP_EVERY_MS) continue
-                val f = runCatching { snapshot(ch) }.onFailure { Log.w(TAG, "snap ${ch.name}: $it") }.getOrNull()
-                if (f != null) _state.update { it.copy(snaps = it.snaps + (ch.name to f.path)) }
+                val f = attempt("snap ${ch.name}") { snapshot(ch) }
+                // A failed grab drops the old frame: better the logo than a picture from hours ago.
+                _state.update { it.copy(snaps = if (f != null) it.snaps + (ch.name to f.path) else it.snaps - ch.name) }
             }
             delay(SNAP_EVERY_MS)
         }
+    }
+
+    /** Like runCatching, but leaving Home (cancellation) really stops the loop. */
+    private suspend fun <T> attempt(what: String, block: suspend () -> T): T? = try {
+        block()
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w(TAG, "$what: $e"); null
     }
 
     private suspend fun loadChannels() {
