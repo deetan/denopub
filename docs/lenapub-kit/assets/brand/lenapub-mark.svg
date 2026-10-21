@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100">
+  <!-- lenapub mark: the "l" as a capsule with a play triangle cut out (even-odd fill). -->
+  <path fill="#F2B33D" fill-rule="evenodd"
+        d="M28,24 A22,22 0 0 1 72,24 L72,76 A22,22 0 0 1 28,76 Z M40,55 L40,83 L64,69 Z"/>
+</svg>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- lenapub mark for the system splash: 1152 viewport = 288dp canvas, mark (700 px tall)
+     inside the 192dp safe circle. evenOdd cuts the play triangle out of the capsule. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp" android:height="288dp"
+    android:viewportWidth="1152" android:viewportHeight="1152">
+    <group android:translateX="226" android:translateY="226" android:scaleX="7" android:scaleY="7">
+        <path
+            android:fillColor="#F2B33D"
+            android:fillType="evenOdd"
+            android:pathData="M28,24 A22,22 0 0 1 72,24 L72,76 A22,22 0 0 1 28,76 Z M40,55 L40,83 L64,69 Z" />
+    </group>
+</vector>

@@ -10,3 +10,4 @@ captures/
 *.keystore
 .env
 .tv-address
+*.zip
