@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -53,6 +56,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -61,10 +66,14 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.tv.material3.Border
+import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.FilterChip
 import androidx.tv.material3.FilterChipDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
 import dev.dt.kinopub.AppContainer
 import dev.dt.kinopub.data.ResumeTarget
 import dev.dt.kinopub.ui.common.ProgressLine
@@ -89,8 +98,8 @@ private fun fineStepMs(heldMs: Long) = when {
  *   ↓ once           → OSD: seek bar with position marker; ← → scrub with a preview frame, commits
  *                      ~1 s after release or on OK
  *   ↓ again          → TRACKS: voiceover / subtitles / quality panel; ↑ from its top row → OSD
- *   ← / → (video)    → quick jump, no seek bar: just a "+18 с" label. Steps grow over a burst of
- *                      presses / a hold: 3 s ×2 → 5 s ×2 → 10 s ×2 → 30 s ×2 → 1 min ×2 → 5 min
+ *   ← / → (video)    → quick jump: a bare seek bar at the bottom, no text. Steps grow over a burst
+ *                      of presses / a hold: 3 s ×3 → 5 s ×3 → 10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min
  *   OK / play-pause  → pause/resume; a big pause sign fades into a small corner badge
  *   audio-track key  → next voiceover         CC key → subtitles on/off
  *   Back             → panel → OSD, scrub → cancel, otherwise exit (progress is saved)
@@ -107,6 +116,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     var overlay by remember { mutableStateOf(Overlay.OSD) }
     var lastInput by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val rootFocus = remember { FocusRequester() }
+    var rootFocused by remember { mutableStateOf(false) }
     val view = LocalView.current
 
     var pos by remember { mutableLongStateOf(0L) }
@@ -149,9 +159,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     // Play/pause always ends fine mode: you're back to plain watching, no top bar.
     fun leaveFine() { if (overlay == Overlay.FINE) overlay = Overlay.NONE }
 
-    // Quick jump (← / → with no overlay): seeks right away, shows only the accumulated offset.
-    var jumpTotal by remember { mutableLongStateOf(0L) }
-    var jumpStep by remember { mutableLongStateOf(0L) }
+    // Quick jump (← / → with no overlay): seeks right away, shows only a bare seek bar.
     var jumpSteps by remember { mutableIntStateOf(0) }
     var jumpForward by remember { mutableStateOf(true) }
     var jumpAt by remember { mutableLongStateOf(0L) }
@@ -160,13 +168,11 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
         val now = System.currentTimeMillis()
         // Auto-repeat fires every ~50 ms: one step per 220 ms while held.
         if (repeat > 0 && now - jumpAt < 220) return
-        if (!(jumpVisible && jumpForward == forward && now - jumpAt < 1_500)) { jumpSteps = 0; jumpTotal = 0 }
+        if (!(jumpVisible && jumpForward == forward && now - jumpAt < 1_500)) jumpSteps = 0
         jumpSteps++; jumpForward = forward; jumpAt = now
         val step = jumpStepMs(jumpSteps)
         val from = vm.player.currentPosition
         val to = (from + if (forward) step else -step).coerceIn(0, maxOf(dur, 0))
-        jumpTotal += to - from
-        jumpStep = step
         jumpVisible = true
         vm.player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
         vm.player.seekTo(to)
@@ -201,9 +207,13 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     }
     // Outside the tracks panel the root owns focus, so the D-pad always works.
     LaunchedEffect(overlay) {
-        if (overlay != Overlay.TRACKS) repeat(10) {
-            if (runCatching { rootFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+        // requestFocus() "succeeds" while a panel card is still focused (the panel is fading out),
+        // and focus then vanished with the card: the remote went dead after picking an episode.
+        // Keep asking until the root really holds focus.
+        if (overlay != Overlay.TRACKS) repeat(40) {
+            runCatching { rootFocus.requestFocus() }
             delay(30)
+            if (rootFocused && it >= 10) return@LaunchedEffect
         }
     }
     // Auto-hide: OSD after 4 s, the fine bar after 3 s of no input (not while scrubbing).
@@ -246,6 +256,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             .fillMaxSize()
             .background(Color.Black)
             .focusRequester(rootFocus)
+            .onFocusChanged { rootFocused = it.isFocused }
             .focusable()
             .onPreviewKeyEvent { e ->
                 val dpadLR = e.key == Key.DirectionLeft || e.key == Key.DirectionRight
@@ -342,25 +353,18 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             )
         }
 
-        // Quick jump label: the accumulated offset, the current step and where we are.
+        // Quick jump: just the seek bar at the bottom, no words — enough to see roughly where you are.
         AnimatedVisibility(
             visible = jumpVisible && overlay == Overlay.NONE,
             enter = fadeIn(tween(120)), exit = fadeOut(tween(400)),
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp),
+            modifier = Modifier.align(Alignment.BottomStart),
         ) {
-            Column(
-                Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 28.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Box(
+                Modifier.fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f))))
+                    .padding(horizontal = K.screenPadH, vertical = 20.dp),
             ) {
-                Text(
-                    (if (jumpTotal >= 0) "+" else "−") + offsetLabel(kotlin.math.abs(jumpTotal)),
-                    fontSize = 44.sp, color = Color.White,
-                )
-                Text(
-                    "шаг ${stepLabel(jumpStep)}  ·  ${clock(pos)} / ${clock(dur)}",
-                    style = MaterialTheme.typography.labelMedium, color = K.muted,
-                )
+                SeekBar(pos, dur, null, emphasized = false)
             }
         }
 
@@ -431,7 +435,10 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     enter = expandVertically(tween(200), expandFrom = Alignment.Top),
                     exit = shrinkVertically(tween(200), shrinkTowards = Alignment.Top),
                 ) {
-                    TracksPanel(vm, ui, panelFocusTick, hasFocus = { panelHasFocus }, onFocusInside = { panelHasFocus = it }, onExitUp = { overlay = Overlay.OSD })
+                    TracksPanel(
+                        vm, ui, panelFocusTick, hasFocus = { panelHasFocus }, onFocusInside = { panelHasFocus = it },
+                        onExitUp = { overlay = Overlay.OSD }, onEpisodePicked = { overlay = Overlay.NONE },
+                    )
                 }
             }
         }
@@ -471,21 +478,25 @@ private fun seekStepMs(heldMs: Long): Long = when {
 
 private fun stepLabel(ms: Long): String = if (ms >= 60_000) "${ms / 60_000} мин" else "${ms / 1000} с"
 
-/** Quick-jump step by its number in the burst: 3 s ×2 → 5 s ×2 → 10 s ×2 → 30 s ×2 → 1 min ×2 → 5 min. */
+/**
+ * Quick-jump step by its number in the burst, kept gentle (5 min after ~10 presses was too much):
+ * 3 s ×3 → 5 s ×3 → 10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min max.
+ */
 private fun jumpStepMs(n: Int): Long = when {
-    n <= 2 -> 3_000L
-    n <= 4 -> 5_000L
-    n <= 6 -> 10_000L
-    n <= 8 -> 30_000L
-    n <= 10 -> 60_000L
-    else -> 300_000L
+    n <= 3 -> 3_000L
+    n <= 6 -> 5_000L
+    n <= 10 -> 10_000L
+    n <= 14 -> 30_000L
+    n <= 18 -> 60_000L
+    n <= 22 -> 120_000L
+    else -> 180_000L
 }
 
-private fun offsetLabel(ms: Long): String = if (ms < 60_000) "${ms / 1000} с" else clock(ms)
-
 /**
- * Every option of every kind on screen at once: one horizontal row per track type.
- * Current choice gets focus when the panel opens, so ← → OK is the whole interaction.
+ * Every option of every kind on screen at once: the previous / next episode on top, then one
+ * horizontal row per track type. The next episode gets focus when the panel opens (else the
+ * previous one, else the current voiceover), so ← → OK is the whole interaction.
+ * Long-press on an episode card swaps that row for every episode of the title.
  */
 @Composable
 private fun TracksPanel(
@@ -495,36 +506,129 @@ private fun TracksPanel(
     hasFocus: () -> Boolean,
     onFocusInside: (Boolean) -> Unit,
     onExitUp: () -> Unit,
+    onEpisodePicked: () -> Unit,
 ) {
     val audioFocus = remember { FocusRequester() }
     val firstFocus = remember { FocusRequester() }
-    // Focus the current voiceover (its row scrolls to it first); fall back to the first chip.
-    // requestFocus() can "succeed" before the chips are placed (the panel is still expanding),
-    // which used to cost an extra key press: keep asking until focus is really inside.
-    LaunchedEffect(focusTick) {
+    val episodeFocus = remember { FocusRequester() }
+    var picking by remember { mutableStateOf(false) }
+    // The picker opens while OK is still held (long-press): ignore that press's repeats and
+    // release, or letting go would play the focused episode. Arm on a fresh press.
+    var armed by remember { mutableStateOf(true) }
+    val hasEpisodes = ui.prev != null || ui.next != null
+    // Focus the next episode (or the current voiceover; its row scrolls to it first); fall back
+    // to the first chip. requestFocus() can "succeed" before the panel is laid out (it is still
+    // expanding), which used to cost an extra key press: keep asking until focus is really inside.
+    // Opening / closing the picker swaps the focused card out, so insist for the first ~200 ms
+    // even if focus looks inside (it can still sit on the card that just left).
+    LaunchedEffect(focusTick, picking) {
+        if (picking) armed = false
         repeat(30) {
-            if (hasFocus()) return@LaunchedEffect
-            runCatching { if (it < 10) audioFocus.requestFocus() else firstFocus.requestFocus() }
+            if (it >= 5 && hasFocus()) return@LaunchedEffect
+            runCatching {
+                when {
+                    hasEpisodes && it < 10 -> episodeFocus.requestFocus()
+                    it < 10 -> audioFocus.requestFocus()
+                    else -> firstFocus.requestFocus()
+                }
+            }
             delay(40)
         }
+    }
+    val play: (EpisodeCard) -> Unit = { e -> picking = false; vm.playEpisode(e.season, e.episode); onEpisodePicked() }
+    // ↑ from the top row leaves the panel and brings the seek bar back.
+    val exitUp = Modifier.onPreviewKeyEvent { e ->
+        if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp) { onExitUp(); true } else false
     }
 
     Column(
         Modifier
             .onFocusChanged { onFocusInside(it.hasFocus) }
+            .onPreviewKeyEvent { e ->
+                // Back: picker → episode row, else panel → seek bar. Caught as a key here: with a
+                // card focused, Back never reached the BackHandler — it only cleared focus.
+                if (e.key == Key.Back) {
+                    if (e.type == KeyEventType.KeyUp) { if (picking) picking = false else onExitUp() }
+                    return@onPreviewKeyEvent true
+                }
+                val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                if (!ok || armed) return@onPreviewKeyEvent false
+                if (e.type == KeyEventType.KeyDown && e.nativeKeyEvent.repeatCount == 0) { armed = true; false } else true
+            }
             .clip(RoundedCornerShape(10.dp)).background(K.surface.copy(alpha = 0.92f)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // ↑ from the top row leaves the panel and brings the seek bar back.
-        Box(Modifier.onPreviewKeyEvent { e ->
-            if (e.type == KeyEventType.KeyDown && e.key == Key.DirectionUp) { onExitUp(); true } else false
-        }) {
+        if (hasEpisodes) {
+            Box(exitUp) {
+                if (picking) EpisodePicker(ui.episodes, episodeFocus, play)
+                else Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Серии", style = MaterialTheme.typography.labelMedium, color = K.muted, modifier = Modifier.width(96.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                        ui.prev?.let { e ->
+                            EpisodeTile(e, "‹ Предыдущая", if (ui.next == null) episodeFocus else null, { play(e) }, { picking = true })
+                        }
+                        ui.next?.let { e -> EpisodeTile(e, "Следующая ›", episodeFocus, { play(e) }, { picking = true }) }
+                    }
+                }
+            }
+        }
+        Box(if (hasEpisodes) Modifier else exitUp) {
             TrackRow("Озвучка", ui.audio, audioFocus, firstFocus) { i, _ -> vm.selectAudio(i) }
         }
         TrackRow("Субтитры", ui.subtitles, null) { i, _ -> vm.selectSubtitle(if (i == 0) null else i - 1) }
         TrackRow("Качество", ui.qualities, null) { _, o -> o.key.removePrefix("q").toIntOrNull()?.let(vm::selectQuality) }
-        if (ui.hasNext) {
-            TrackRow("Дальше", listOf(TrackOption("next", "Следующая серия ›", null, false)), null) { _, _ -> vm.playNext() }
+    }
+}
+
+/** Every episode of the title in one row, the current one focused; OK plays, Back returns. */
+@Composable
+private fun EpisodePicker(episodes: List<EpisodeCard>, focus: FocusRequester, onPick: (EpisodeCard) -> Unit) {
+    val at = episodes.indexOfFirst { it.current }.coerceAtLeast(0)
+    val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // An off-screen card isn't composed and can't take focus: scroll to the current one first.
+    LaunchedEffect(Unit) { rowState.scrollToItem((at - 1).coerceAtLeast(0)) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Все серии", style = MaterialTheme.typography.labelMedium, color = K.muted, modifier = Modifier.width(96.dp))
+        LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)) {
+            itemsIndexed(episodes, key = { _, e -> "${e.season}-${e.episode}" }) { i, e ->
+                EpisodeTile(e, if (e.current) "Сейчас" else null, if (i == at) focus else null, { onPick(e) }, null)
+            }
+        }
+    }
+}
+
+/** 16:9 episode still with "S2·E5 · title" and how far it was watched. */
+@Composable
+private fun EpisodeTile(e: EpisodeCard, caption: String?, focus: FocusRequester?, onClick: () -> Unit, onLongClick: (() -> Unit)?) {
+    val shape = RoundedCornerShape(8.dp)
+    Card(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        shape = CardDefaults.shape(shape),
+        border = CardDefaults.border(focusedBorder = Border(BorderStroke(3.dp, K.accent), shape = shape)),
+        // No zoom: a scaled card would be clipped by the panel.
+        scale = CardDefaults.scale(focusedScale = 1f),
+        modifier = Modifier.width(208.dp).aspectRatio(16f / 9f)
+            .then(if (focus != null) Modifier.focusRequester(focus) else Modifier),
+    ) {
+        Box(Modifier.fillMaxSize().background(K.surfaceHi)) {
+            AsyncImage(e.thumbnail, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.3f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.9f))))
+            caption?.let {
+                Text(
+                    it, style = MaterialTheme.typography.labelMedium, color = Color.White,
+                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                        .clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()) {
+                Text(
+                    listOfNotNull(e.label, e.title).joinToString(" · "), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelMedium, color = K.text,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                )
+                if (e.progress > 0f) ProgressLine(e.progress, height = 3.dp)
+            }
         }
     }
 }

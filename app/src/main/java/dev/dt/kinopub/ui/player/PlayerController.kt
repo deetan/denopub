@@ -40,6 +40,17 @@ data class TrackOption(
     val selected: Boolean,
 )
 
+/** One episode (or movie part) as a card in the tracks panel. */
+data class EpisodeCard(
+    val season: Int?,
+    val episode: Int,
+    val label: String,       // "S2·E5"
+    val title: String?,
+    val thumbnail: String?,
+    val progress: Float,     // 0..1 of the saved position; 1 when watched
+    val current: Boolean,
+)
+
 data class PlayerUi(
     val title: String = "",
     val episodeLabel: String? = null,      // "S2·E5 · Название серии"
@@ -47,6 +58,9 @@ data class PlayerUi(
     val subtitles: List<TrackOption> = emptyList(),
     val qualities: List<TrackOption> = emptyList(),
     val hasNext: Boolean = false,
+    val prev: EpisodeCard? = null,
+    val next: EpisodeCard? = null,
+    val episodes: List<EpisodeCard> = emptyList(), // all of them, for the long-press picker
     val error: String? = null,
 )
 
@@ -83,6 +97,8 @@ class PlayerController(
     private var choice: TrackChoice = TrackChoice()
     private var choiceApplied = false
     private var progressJob: Job? = null
+    // Positions saved during this session (kino.pub's copy in [item] is from when playback started).
+    private val savedSec = mutableMapOf<Pair<Int?, Int>, Int>()
 
     init {
         player.addListener(object : Player.Listener {
@@ -176,12 +192,17 @@ class PlayerController(
         player.prepare()
         player.playWhenReady = true
 
+        val cards = episodeCards(it, target)
+        val at = cards.indexOfFirst { e -> e.current }
         _ui.value = PlayerUi(
+            prev = cards.getOrNull(at - 1)?.takeIf { at > 0 },
+            next = cards.getOrNull(at + 1)?.takeIf { at >= 0 },
             title = it.title,
             episodeLabel = target.season?.let { s ->
                 "S$s·E${target.episode}" + (v.title?.takeIf { t -> t.isNotBlank() }?.let { t -> " · $t" } ?: "")
             },
             hasNext = c.repository.nextOf(it, target.season, target.episode) != null,
+            episodes = cards,
             qualities = qualityOptions(v.files, f),
         )
     }
@@ -193,26 +214,68 @@ class PlayerController(
         return capped.maxWithOrNull(compareBy<MediaFile> { it.h }.thenBy { if (it.codec == "h265") 1 else 0 })
     }
 
+    /** Every episode in order across seasons (or the parts of a movie). */
+    private fun flatEpisodes(it: Item): List<Pair<Int?, Video>> =
+        if (it.seasons.isNotEmpty()) it.seasons.sortedBy { s -> s.number }.flatMap { s -> s.episodes.sortedBy { v -> v.number }.map { v -> s.number to v } }
+        else it.videos.sortedBy { v -> v.number }.map { v -> null to v }
+
+    private fun episodeCards(it: Item, at: ResumeTarget): List<EpisodeCard> {
+        val all = flatEpisodes(it)
+        if (all.size < 2) return emptyList()
+        return all.map { (s, v) ->
+            val sec = resumeSec(s, v)
+            val watched = sec == 0 && (v.watching?.status == 1 || v.watched == 1)
+            EpisodeCard(
+                season = s, episode = v.number,
+                label = if (s != null) "S$s·E${v.number}" else "Часть ${v.number}",
+                title = v.title?.takeIf { t -> t.isNotBlank() },
+                thumbnail = v.thumbnail,
+                progress = if (watched) 1f else if (v.duration > 0) (sec.toFloat() / v.duration).coerceIn(0f, 1f) else 0f,
+                current = s == at.season && v.number == at.episode,
+            )
+        }
+    }
+
+    /** Where an episode resumes: this session's saved spot, else kino.pub's unfinished time, else 0. */
+    private fun resumeSec(season: Int?, v: Video): Int =
+        savedSec[season to v.number] ?: v.watching?.takeIf { w -> w.status != 1 && w.time > 0 }?.time ?: 0
+
+    /**
+     * Switch to any episode. The one you leave keeps its position and is NOT marked watched
+     * (a stray "next" used to wipe its progress); the target resumes where it was left.
+     */
+    fun playEpisode(season: Int?, episode: Int) {
+        val it = item ?: return
+        if (season == current.season && episode == current.episode) return
+        val v = c.repository.video(it, season, episode) ?: return
+        saveProgress()
+        load(ResumeTarget(it.id, season, episode, 0), resumeSec(season, v) * 1000L)
+    }
+
     fun playNext() {
         val it = item ?: return
         val next = c.repository.nextOf(it, current.season, current.episode) ?: return
-        val done = current
-        c.appScope.launch { c.repository.markWatched(it.id, done.season, done.episode) }
-        load(ResumeTarget(it.id, next.first, next.second, 0), 0)
+        playEpisode(next.first, next.second)
     }
 
+    /** Played to the end: that one is watched; the next starts (from its own saved spot). */
     private fun onEnded() {
         val it = item ?: return
         val done = current
+        savedSec[done.season to done.episode] = 0
         c.appScope.launch { c.repository.markWatched(it.id, done.season, done.episode) }
-        if (c.repository.nextOf(it, current.season, current.episode) != null) playNext()
+        val next = c.repository.nextOf(it, done.season, done.episode) ?: return
+        val v = c.repository.video(it, next.first, next.second) ?: return
+        load(ResumeTarget(it.id, next.first, next.second, 0), resumeSec(next.first, v) * 1000L)
     }
 
     fun saveProgress() {
         val it = item ?: return
         val sec = (player.currentPosition / 1000).toInt()
-        if (sec < 5) return
+        // At the end onEnded marks it watched; a time write here would race it.
+        if (sec < 5 || player.playbackState == Player.STATE_ENDED) return
         val t = current
+        savedSec[t.season to t.episode] = sec
         // appScope, not viewModelScope: this also runs from onCleared, when viewModelScope is dead.
         c.appScope.launch {
             c.repository.markTime(it.id, t.season, t.episode, sec)

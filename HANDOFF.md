@@ -59,8 +59,10 @@ Verified on the real Chromecast by the owner:
    its still frame; no audio stream).
 2. **Player controls reworked 2026-10-18** (owner disliked scrubbing and the pause overlay):
    quick jump with a "+N с" label, progressive steps, fading pause sign, no pause sign while frame
-   stepping. Deployed to the TV, not yet tested by the owner, who has more player feedback to
-   dictate. Tuning knobs: `jumpStepMs`, the 220 ms hold throttle, the 1.2 s / 1.5 s fade delays.
+   stepping. 2026-10-24 owner feedback applied: OK leaves fine mode; quick jump shows a bare
+   seek bar (no label) with gentler steps (max 3 min); tracks panel starts with prev/next
+   episode stills, long-press → all episodes; switching episodes no longer marks watched.
+   Not yet verified on the TV (it was asleep) — check on the next deploy. Tuning knobs: `jumpStepMs`, the 220 ms hold throttle, the 1.2 s / 1.5 s fade delays.
 3. **Diagnostic logging is still on** (tag `denopub`):
    - `continue: candidates`, `continue: dropped`, `continue: order` (with all sort keys) in `Repository.continueWatching`.
    - The HLS `#EXT-X-MEDIA` dump and audio-track list in `PlayerController`.

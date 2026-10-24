@@ -68,15 +68,21 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   Back leave it; the bar hides after 3 s idle (`fineBar`) and returns on the next ← →/↑ ·
   NONE → ↓ OSD (seek bar with white position marker + stats line, **no hint text**; ← → scrub
   shows just the bar + target time — no preview frame, owner's call — commits ~0.9 s after
-  key-up or on OK) → ↓ TRACKS panel (voiceover / subtitles / quality / next episode; ↑ from its
-  top row → OSD). Focus must land in the panel at once: `TracksPanel` retries `requestFocus`
+  key-up or on OK) → ↓ TRACKS panel: top row «Серии» = previous + next episode as 16:9 stills
+  (S·E · title · progress line; first episode → only next, last → only previous), focused on
+  the next one; then voiceover / subtitles / quality; ↑ from the top row → OSD. **Long-press an
+  episode card** → that row becomes «Все серии» (every episode across seasons, current focused;
+  OK plays, Back returns) — same held-OK guard as `ActionMenu`. Switching episodes
+  (`PlayerController.playEpisode`, also media ⏭) saves the left episode's time and does **not**
+  mark it watched; the target resumes from this session's `savedSec` or kino.pub's unfinished
+  time. Only playing to the end marks watched. Focus must land in the panel at once: `TracksPanel` retries `requestFocus`
   until `hasFocus()` (it used to "succeed" while the panel was still expanding and cost an extra
   press). Panel open/close is ONE `expandVertically`/`shrinkVertically` — no outer
   `animateContentSize`, which lagged and made the bar "fall" after the panel vanished.
-  NONE → ← → = **quick jump**: seeks at once, no seek bar, only a "+18 с · шаг 5 с" label
-  (accumulated offset of the burst). Step grows by step count within a burst (presses < 1.5 s
-  apart, or a hold throttled to one step per 220 ms): 3 s ×2 → 5 s ×2 → 10 s ×2 → 30 s ×2 →
-  1 min ×2 → 5 min (`jumpStepMs`). Media ⏪/⏩ do the same.
+  NONE → ← → = **quick jump**: seeks at once and shows only a bare thin seek bar at the bottom —
+  **no text at all** (owner's call). Step grows by step count within a burst (presses < 1.5 s
+  apart, or a hold throttled to one step per 220 ms), kept gentle, max 3 min: 3 s ×3 → 5 s ×3 →
+  10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min (`jumpStepMs`). Media ⏪/⏩ do the same.
   OK = pause/resume only: a big ❚❚ over a dimmed picture fades after 1.2 s into a small
   top-right badge. Pauses caused by frame stepping show **no** pause sign (it's a still frame
   you're studying) — tracked by `userPaused`; pause state comes from `playWhenReady`, not
@@ -150,6 +156,13 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - Writes from `onCleared` must not use `viewModelScope` (cancelled) — use `AppContainer.appScope`.
 - **Long-press opens dialogs while OK is still held**: `ActionMenu` swallows OK until a fresh
   key-down, or the release clicks the first item. Keep that guard.
+- **Back inside the tracks panel never reached `BackHandler`** — with a card focused it only
+  cleared focus, and the next D-pad keys landed on whatever card got focus again (a test once
+  started the previous episode that way). `TracksPanel` catches `Key.Back` in
+  `onPreviewKeyEvent` (picker → episode row, else → OSD).
+- **Root focus after the panel closes**: `requestFocus()` on the player root "succeeds" while a
+  panel card is still focused during the fade-out; the card then vanished with focus and the
+  remote went dead. The root retries until its own `onFocusChanged` says it holds focus.
 - **`PlayerView` must be non-focusable** (`FOCUS_BLOCK_DESCENDANTS`) — it ate D-pad keys.
 - `BasicTextField` swallows the D-pad — Search moves focus out on ↓ manually.
 - An off-screen chip in a `LazyRow` isn't composed and can't take focus: rows scroll to the
