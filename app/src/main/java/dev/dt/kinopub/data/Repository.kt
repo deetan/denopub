@@ -131,6 +131,12 @@ class Repository(
         // recent history (they sort after anything with a timestamp).
         serials.await().filter { it.subscribed }.forEach { candidates.putIfAbsent(it.id, listed.getValue(it.id)) }
         movies.await().forEach { candidates.putIfAbsent(it.id, listed.getValue(it.id)) }
+        // Unsubscribed serials with progress, but only if an episode is half-watched: older views
+        // fall off the two history pages (Foundation, stopped in S3·E1, was missing from the row),
+        // while long-dropped shows must not flood it: only those touched in the last 120 days.
+        val midOnly = HashSet<Long>()
+        val updated = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+        serials.await().filter { !it.subscribed }.forEach { if (candidates.putIfAbsent(it.id, listed.getValue(it.id)) == null) midOnly += it.id }
 
         // Kids/adult comes from a persistent cache only, so Home never waits on /items calls;
         // unknown titles are classified afterwards by classifyKids().
@@ -143,8 +149,12 @@ class Repository(
             async {
                 runCatching {
                     val info = api.watching(item.id)
-                    resumeEntry(item, info, newCounts[item.id] ?: 0, explicit = item.id in started || item.id in played)
-                        ?.copy(isKids = kids[item.id] == true, lastActivityMs = recency(item.id))
+                    // kino.pub's own "last changed" per episode: a recency signal that history misses.
+                    val updatedMs = (info.seasons.flatMap { it.episodes } + info.videos).mapNotNull { it.updated }.maxOrNull()?.times(1000) ?: 0L
+                    updated[item.id] = updatedMs
+                    val stale = item.id in midOnly && System.currentTimeMillis() - updatedMs > MID_ONLY_MAX_AGE_MS
+                    (if (stale) null else resumeEntry(item, info, newCounts[item.id] ?: 0, explicit = item.id in started || item.id in played, midEpisodeOnly = item.id in midOnly))
+                        ?.copy(isKids = kids[item.id] == true, lastActivityMs = maxOf(recency(item.id), updatedMs))
                         .also { if (it == null) android.util.Log.i("denopub", "continue: dropped ${item.id} ${item.title} (nothing to resume)") }
                 }.onFailure { android.util.Log.w("denopub", "continue: failed ${item.id} ${item.title}: ${it.message?.take(200)}") }
                     .getOrNull()
@@ -155,7 +165,7 @@ class Repository(
                 val fmt = java.text.SimpleDateFormat("dd.MM HH:mm:ss", java.util.Locale.ROOT)
                 list.forEach { e ->
                     android.util.Log.i("denopub", "continue: order ${e.title.take(18)} kids=${e.isKids} " +
-                        "history=${lastWatchedMs[e.itemId]?.let { fmt.format(it) }} started=${started[e.itemId]?.let { fmt.format(it) }} " +
+                        "history=${lastWatchedMs[e.itemId]?.let { fmt.format(it) }} updated=${updated[e.itemId]?.takeIf { it > 0 }?.let { fmt.format(it) }} started=${started[e.itemId]?.let { fmt.format(it) }} " +
                         "played=${played[e.itemId]?.let { fmt.format(it) }}")
                 }
             }
@@ -180,7 +190,7 @@ class Repository(
      * with no progress yet still gets a card, starting from its first unwatched part/episode —
      * kino.pub ignores tiny marktime values, so "Начал смотреть" alone left nothing to resume.
      */
-    private fun resumeEntry(item: Item, info: WatchingInfo, newEpisodes: Int, explicit: Boolean = false): ContinueEntry? {
+    private fun resumeEntry(item: Item, info: WatchingInfo, newEpisodes: Int, explicit: Boolean = false, midEpisodeOnly: Boolean = false): ContinueEntry? {
         val poster = item.posters?.wide ?: item.posters?.big ?: item.posters?.medium
         if (info.seasons.isNotEmpty()) {
             val flat = info.seasons.sortedBy { it.number }.flatMap { s ->
@@ -190,6 +200,7 @@ class Repository(
             // marktime stores time without touching status: "in progress" = time > 0, status != 1.
             val lastTouched = flat.indexOfLast { (_, e) -> e.status == 1 || e.time > 0 }
             if (lastTouched < 0 && !explicit && newEpisodes == 0) return null // never touched
+            if (midEpisodeOnly && flat.none { (_, e) -> e.time > 0 && e.status != 1 }) return null
             val next = flat.drop(maxOf(lastTouched, 0)).firstOrNull { (_, e) -> e.status != 1 }
                 ?: return null // fully watched, nothing new
             val (season, ep) = next
@@ -335,5 +346,6 @@ class Repository(
     companion object {
         const val WISHLIST_TITLE = "Wishlist"
         private val WISHLIST_NAMES = setOf("wishlist", "хочу посмотреть", "посмотреть")
+        private const val MID_ONLY_MAX_AGE_MS = 120L * 24 * 3600 * 1000
     }
 }

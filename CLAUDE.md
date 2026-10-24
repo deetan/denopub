@@ -23,10 +23,12 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Home Continue = three rows**: Сериалы / Фильмы / Детям (`HomeData.continueSerials/Movies/Kids`).
   `Repository.continueWatching` builds candidates from: local `playedAt`/`startedAt` titles, then
   `/v1/history` (2 pages), subscribed serials (`watching/serials?subscribed=1`), unfinished movies
-  (`watching/movies`). **Every** candidate is checked with `/v1/watching?id=` (no caps — a cap once
+  (`watching/movies`), and **unsubscribed** serials (`subscribed=0`) — those only with a half-watched
+  episode touched in the last 120 days (Foundation, last seen 3 months back, had fallen off the row). **Every** candidate is checked with `/v1/watching?id=` (no caps — a cap once
   dropped Peppa) and turned into a resume point by `resumeEntry`: first unfinished episode at/after
   the last touched one; for titles started explicitly here (`explicit=true`) a card appears even
-  with zero progress. Sort key `lastActivityMs` = max(history last_seen, startedAt, playedAt),
+  with zero progress. Sort key `lastActivityMs` = max(history last_seen, startedAt, playedAt, newest episode `updated`
+  from `/v1/watching`),
   newest first. **kino.pub history is unreliable for recency** (it never listed Peppa), hence the
   local stamps; `playedAt` is refreshed on every progress save and cleared only by
   "Убрать из «Продолжить»".

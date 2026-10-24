@@ -152,7 +152,7 @@ Video (a.k.a. media; used for movie parts and episodes):
 
 ## 6. Watching (all GET)
 
-- `GET /v1/watching?id=&video=&season=` -> `{status,item:{id,title,type,seasons:[{id,number,status,episodes:[{id,number,title,duration,time,status,updated}]}]}}`; movies: `item.videos:[{id,number,title,duration,time,status,updated}]`. Omit video/season = all.
+- `GET /v1/watching?id=&video=&season=` -> `{status,item:{id,title,type,seasons:[{id,number,status,episodes:[{id,number,title,duration,time,status,updated}]}]}}`; movies: `item.videos:[{id,number,title,duration,time,status,updated}]`. Omit video/season = all. Verified 2026-10-24: each episode/video also has `updated` (unix seconds of the last time/status change) — a reliable "last watched" per title, unlike `/v1/history`.
 - `GET /v1/watching/movies` -> `{status,items:[{id,type,subtype,title,posters}]}` (unfinished movies/concerts/docs/3D). No timecode.
 - `GET /v1/watching/serials?subscribed=0|1` -> `{status,items:[{id,type,subtype,title,posters,total,watched,new}]}`; `total`=episodes, `watched`, `new`=unwatched. [filmax]: `subscribed` splits series into subscribed/unsubscribed, query both; ignored for movies; `{type}` only `movies|serials`.
 - `GET /v1/watching/marktime?id=&video=<number>&time=<sec>&season=<n>` -> `{status}`. `season` mandatory for serials (else 404). Does NOT set status [filmax].

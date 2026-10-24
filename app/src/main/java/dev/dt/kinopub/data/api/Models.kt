@@ -214,6 +214,7 @@ data class WatchingVideo(
     val time: Int = 0,
     val duration: Int = 0,
     val status: Int = -1,
+    val updated: Long? = null, // unix seconds of the last time/status change (null if never)
 )
 
 // ---------- History ----------
