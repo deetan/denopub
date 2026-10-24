@@ -30,8 +30,8 @@ Verified on the real Chromecast by the owner:
   - «Оценить на IMDb» / «Моя оценка ★ N» — rates on the owner's IMDb account (2026-10-24).
 - **IMDb rating after a movie** (2026-10-24): played to the end or left in the last 10 % → a 1–10
   dialog, once per title, skipped if already rated. Writes go through the owner's movies service
-  (`ImdbRater`); the TV needs a one-time pairing code — **not yet paired on the real TV** as of
-  2026-10-24 (the first rating attempt asks for the code).
+  (`ImdbRater`); the TV needs a one-time pairing code — **paired on the real TV 2026-10-24**, a
+  test send (The Fifth Element, 10 → 10) went through end to end.
 - **Player levels:**
   - ↑ opens a fine-stepping bar at the top.
   - ↓ opens the seek bar, with a marker and a preview frame while scrubbing.
