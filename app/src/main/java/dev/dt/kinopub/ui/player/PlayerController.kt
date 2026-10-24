@@ -64,6 +64,9 @@ data class PlayerUi(
     val error: String? = null,
 )
 
+/** "Rate it on IMDb" prompt at the end of a movie. */
+data class RatePrompt(val imdbId: Long, val title: String, val current: Int?)
+
 /**
  * Owns ExoPlayer for one playback session (which may span several episodes).
  *
@@ -100,6 +103,12 @@ class PlayerController(
     // Positions saved during this session (kino.pub's copy in [item] is from when playback started).
     private val savedSec = mutableMapOf<Pair<Int?, Int>, Int>()
 
+    private val _rate = MutableStateFlow<RatePrompt?>(null)
+    val rate: StateFlow<RatePrompt?> = _rate
+    // Movies only: may we ask for an IMDb rating at the end? Only when not asked before and the
+    // owner hasn't rated it yet (null until both are known — then we just don't ask).
+    private var mayAskRating = false
+
     init {
         player.addListener(object : Player.Listener {
             override fun onTracksChanged(tracks: Tracks) {
@@ -131,6 +140,14 @@ class PlayerController(
                 // even before (or without) kino.pub updating its history.
                 c.appScope.launch { c.prefs.markPlayed(it.id) }
                 load(start)
+                val imdbId = it.imdb
+                if (!it.isSerial && imdbId != null && !c.prefs.rateAsked(it.id)) {
+                    c.appScope.launch {
+                        val tt = dev.dt.kinopub.data.api.ImdbRater.tconst(imdbId)
+                        mayAskRating = c.rater.myRating(tt) == null
+                        android.util.Log.i("denopub", "rate: $tt may ask=$mayAskRating")
+                    }
+                }
             }.onFailure { _ui.value = _ui.value.copy(error = it.message) }
         }
         progressJob = viewModelScope.launch {
@@ -264,9 +281,27 @@ class PlayerController(
         val done = current
         savedSec[done.season to done.episode] = 0
         c.appScope.launch { c.repository.markWatched(it.id, done.season, done.episode) }
-        val next = c.repository.nextOf(it, done.season, done.episode) ?: return
+        val next = c.repository.nextOf(it, done.season, done.episode) ?: run { offerRating(); return }
         val v = c.repository.video(it, next.first, next.second) ?: return
         load(ResumeTarget(it.id, next.first, next.second, 0), resumeSec(next.first, v) * 1000L)
+    }
+
+    /**
+     * Show the IMDb rating prompt if the movie is (nearly) over: played to the end, or left in
+     * the last 10 % (the credits). Once per title. True when shown — the caller waits for it.
+     */
+    fun offerRating(): Boolean {
+        val it = item ?: return false
+        val imdbId = it.imdb ?: return false
+        if (!mayAskRating || c.repository.nextOf(it, current.season, current.episode) != null) return false
+        val dur = player.duration
+        val ended = player.playbackState == Player.STATE_ENDED
+        if (!ended && (dur <= 0 || player.currentPosition < dur * 0.9)) return false
+        mayAskRating = false
+        player.pause()
+        c.appScope.launch { c.prefs.markRateAsked(it.id) }
+        _rate.value = RatePrompt(imdbId, it.title, null)
+        return true
     }
 
     fun saveProgress() {

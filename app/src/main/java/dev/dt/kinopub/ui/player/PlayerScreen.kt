@@ -77,6 +77,8 @@ import coil3.compose.AsyncImage
 import dev.dt.kinopub.AppContainer
 import dev.dt.kinopub.data.ResumeTarget
 import dev.dt.kinopub.ui.common.ProgressLine
+import dev.dt.kinopub.ui.common.RateDialog
+import dev.dt.kinopub.ui.common.splitTitle
 import dev.dt.kinopub.ui.theme.K
 import kotlinx.coroutines.delay
 
@@ -247,9 +249,13 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             overlay == Overlay.TRACKS -> overlay = Overlay.OSD
             overlay == Overlay.FINE -> overlay = Overlay.NONE
             scrubMs != null -> cancelScrub()
+            // Leaving a movie in its credits: ask for the IMDb rating first (once per title).
+            vm.offerRating() -> Unit
             else -> onExit()
         }
     }
+    val ratePrompt by vm.rate.collectAsState()
+    ratePrompt?.let { p -> RateDialog(c, p.imdbId, splitTitle(p.title).first, p.current) { onExit() } }
 
     Box(
         Modifier

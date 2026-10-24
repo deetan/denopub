@@ -22,7 +22,11 @@ Long-press any card for actions: mark watched, "Начал смотреть", re
 add/remove. In a title card, long-press an episode or season to toggle it watched. Every action is
 written to kino.pub immediately, so the official apps and the website see the same state. The title
 card also shows the English IMDb description (OK on the description opens it in full) and
-IMDb/kino.pub trailers. There's a search screen (movies / serials filter) behind **Поиск**.
+IMDb/kino.pub trailers, and a **rate on IMDb** button (1–10, shows your current rating). When a
+movie ends — or you leave it in the last 10 % — the TV asks once for an IMDb rating (skipped if you
+rated it already). Ratings go to your IMDb account through the [movies](https://github.com/deetan/movies)
+service (den.tanaev.su/movies), which holds the IMDb session; the TV is paired once with a code
+from its *Ratings & sync → Add another device*. There's a search screen (movies / serials filter) behind **Поиск**.
 
 The player has three levels: ↓ shows the seek bar (← → scrub with a preview frame, faster the
 longer you hold), ↓ again opens one row each for voiceover, subtitles and quality (every option
@@ -150,6 +154,8 @@ app/src/main/java/dev/dt/kinopub/
   data/api/                KinopubApi (hand-written OkHttp client) + DTOs
   data/auth/               TokenStore, DeviceRegistration (4K/HDR/hls4 settings)
   data/api/ImdbClient.kt   IMDb plot + trailers (unofficial GraphQL)
+  data/api/ImdbRater.kt    your IMDb rating: read (public GraphQL), write via the movies service
+  ui/common/RateDialog.kt  1–10 rating dialog + one-time pairing-code entry
   data/prefs/LocalPrefs.kt track choices, wishlist seen-set, kids flags, recency stamps
   data/Repository.kt       home assembly, resume-point logic, wishlist folder
   ui/Navigation.kt         routes: auth, home, details/{id}, player/{id}?season&episode&start

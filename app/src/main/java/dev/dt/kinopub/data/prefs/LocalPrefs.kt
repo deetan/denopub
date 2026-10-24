@@ -96,6 +96,23 @@ class LocalPrefs(private val context: Context) {
         }
     }
 
+    private val kRateKey = stringPreferencesKey("imdb_rate_key")
+    private val kRateAsked = stringSetPreferencesKey("imdb_rate_asked")
+
+    /** Device key for the movies service's IMDb rating API (got once with a pairing code). */
+    suspend fun rateKey(): String? = context.localStore.data.first()[kRateKey]
+
+    suspend fun saveRateKey(key: String?) {
+        context.localStore.edit { if (key == null) it.remove(kRateKey) else it[kRateKey] = key }
+    }
+
+    /** Titles the "rate it on IMDb" prompt was already shown for — it comes once per title. */
+    suspend fun rateAsked(id: Long): Boolean = context.localStore.data.first()[kRateAsked].orEmpty().contains(id.toString())
+
+    suspend fun markRateAsked(id: Long) {
+        context.localStore.edit { it[kRateAsked] = it[kRateAsked].orEmpty() + id.toString() }
+    }
+
     suspend fun seenWishlistIds(): Set<Long> =
         context.localStore.data.first()[kSeenWishlist].orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 

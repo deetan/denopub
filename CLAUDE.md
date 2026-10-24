@@ -95,6 +95,15 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   teasers via `data/api/ImdbClient.kt`, unofficial GraphQL `caching.graphql.imdb.com` — imdb.com
   HTML is behind an anti-bot wall) played in `TrailerScreen`; season chips and episode rows.
   Long-press: episode → toggle watched; season chip → toggle the whole season.
+- **IMDb rating** (`data/api/ImdbRater.kt`, `ui/common/RateDialog.kt`): the owner's own rating is
+  read from public GraphQL (`title.userRating(userId: "ur0218725")`); writes go to his **movies
+  service** (`~/Projects/movies`, `github.com/deetan/movies`, `POST den.tanaev.su/movies/api/rate`
+  with `x-imdb-user` + `x-rate-key`). That server keeps the IMDb session cookie encrypted — never
+  copy cookies to the TV. The TV's device key (DataStore `local` → `imdb_rate_key`) comes from
+  claiming a pairing code (`/api/rating/claim`, code from the site's *Ratings & sync → Add another
+  device*, 8 chars, 10 min); a `DEVICE` error wipes it and asks again. `PlayerController.offerRating`
+  prompts at STATE_ENDED or on Back in the last 10 % of a **movie** (no next part), once per title
+  (`imdb_rate_asked`), only if unrated. Title card button «Оценить на IMDb» / «Моя оценка ★ N».
 - **Home** is compact: 92 dp two-column header (title | episode · time left · progress), 160 dp
   cards with one-line captions → ~3.5 rows visible. Cached on disk (`filesDir/home.json`) and shown
   instantly; fresh data replaces it. Back: first to the first card, then a second Back within
@@ -177,6 +186,11 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   app; there are no home-screen widgets. `system/WatchNext.kt` stays (harmless);
   `system/WakeService.kt` (auto-open on power-on) exists but the owner declined it — inert unless
   enabled in Accessibility settings.
+- **Emulator clock drifts when booted from a snapshot** (it came up 3 days behind): every HTTPS call
+  to IMDb then fails with `SSLHandshakeException: Chain validation failed` (no IMDb plot, no rating).
+  Cold-boot it (`emulator -avd kino_tv -no-snapshot-load`); `adb root`/`date` are refused.
+- **Rating writes are real.** Testing `RateDialog` without a device key stops at the pairing step
+  (safe); with a key, OK changes the owner's IMDb rating — re-send the same value or ask first.
 - **The emulator and TV use the owner's real kino.pub account.** Never drive "mark watched" /
   "remove" flows blind with adb — screenshot before every OK (a blind sequence once marked a whole
   season watched).

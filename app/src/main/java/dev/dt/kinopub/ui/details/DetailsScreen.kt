@@ -57,6 +57,7 @@ import dev.dt.kinopub.data.api.Video
 import dev.dt.kinopub.ui.common.ActionMenu
 import dev.dt.kinopub.ui.common.MenuAction
 import dev.dt.kinopub.ui.common.ProgressLine
+import dev.dt.kinopub.ui.common.RateDialog
 import dev.dt.kinopub.ui.common.formatMinutes
 import dev.dt.kinopub.ui.common.splitTitle
 import dev.dt.kinopub.ui.theme.K
@@ -94,6 +95,10 @@ fun DetailsScreen(
     var imdb by remember { mutableStateOf<dev.dt.kinopub.data.api.ImdbInfo?>(null) }
     var kpTrailer by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(item?.imdb) { item?.imdb?.let { imdb = c.imdb.info(it) } }
+    // The owner's own IMDb rating (public profile); the button next to "watched" changes it.
+    var myRating by remember { mutableStateOf<Int?>(null) }
+    var rating by remember { mutableStateOf(false) }
+    LaunchedEffect(item?.imdb) { item?.imdb?.let { myRating = c.rater.myRating(dev.dt.kinopub.data.api.ImdbRater.tconst(it)) } }
     LaunchedEffect(id) { kpTrailer = runCatching { c.api.trailerUrl(id) }.getOrNull() }
 
     /** Run a kino.pub write, show a confirmation, re-read the item so statuses are real. */
@@ -126,6 +131,8 @@ fun DetailsScreen(
 
     menu?.let { (t, actions) -> ActionMenu(t, actions) { menu = null } }
     if (showPlot) PlotDialog(titleRu, it.plot, imdb?.plot) { showPlot = false }
+    val imdbId = it.imdb
+    if (rating && imdbId != null) RateDialog(c, imdbId, titleRu, myRating) { v -> rating = false; if (v != null) myRating = v }
 
     fun episodeMenu(s: Int, e: Video) {
         val watched = e.watching?.status == 1
@@ -229,6 +236,9 @@ fun DetailsScreen(
                 OutlinedButton(onClick = {
                     act(if (fullyWatched) "Отметка снята" else "Отмечено просмотренным") { c.repository.setItemWatched(it, !fullyWatched) }
                 }) { Text(if (fullyWatched) "Просмотрено ✓" else "Отметить просмотренным") }
+                if (imdbId != null) OutlinedButton(onClick = { rating = true }) {
+                    Text(myRating?.let { r -> "Моя оценка ★ $r" } ?: "Оценить на IMDb")
+                }
             }
 
             // Trailers: kino.pub's + IMDb's (trailers and teasers, newest first as IMDb lists them).

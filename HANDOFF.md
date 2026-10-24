@@ -27,6 +27,11 @@ Verified on the real Chromecast by the owner:
   - Russian description plus the English one from IMDb; focus the description and press OK to read it in full.
   - IMDb and kino.pub trailers, with short labels.
   - Long-press an episode or season to toggle it watched.
+  - «Оценить на IMDb» / «Моя оценка ★ N» — rates on the owner's IMDb account (2026-10-24).
+- **IMDb rating after a movie** (2026-10-24): played to the end or left in the last 10 % → a 1–10
+  dialog, once per title, skipped if already rated. Writes go through the owner's movies service
+  (`ImdbRater`); the TV needs a one-time pairing code — **not yet paired on the real TV** as of
+  2026-10-24 (the first rating attempt asks for the code).
 - **Player levels:**
   - ↑ opens a fine-stepping bar at the top.
   - ↓ opens the seek bar, with a marker and a preview frame while scrubbing.
@@ -156,3 +161,8 @@ instead.
   - Long-press toggles episode/season watched.
   - The full description opens with OK.
   - Wishlist removal is retried until it's confirmed.
+- **2026-10-24:**
+  - IMDb rating: at the end of a movie (once per title, not if already rated) and from the title
+    card, via the movies service (den.tanaev.su/movies) — its IMDb session cookie never leaves that
+    server; the TV holds only a per-device key from a pairing code. Movies only at the end; series
+    are rated from the title card.
