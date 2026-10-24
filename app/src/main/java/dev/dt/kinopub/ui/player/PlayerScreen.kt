@@ -84,7 +84,7 @@ private fun fineStepMs(heldMs: Long) = when {
 /**
  * Remote map:
  *   ↑ (from video)   → FINE mode: top bar, ← → step 0.5 s (held: 1 s, 2 s, 5 s), pauses. The mode stays
- *                      until ↓ or Back; the bar hides after 3 s idle and returns on the next ← →
+ *                      until ↓, OK (play/pause) or Back; the bar hides after 3 s idle and returns on the next ← →
  *   Rule everywhere: ↓ reveals the next level, ↑ hides the current one
  *   ↓ once           → OSD: seek bar with position marker; ← → scrub with a preview frame, commits
  *                      ~1 s after release or on OK
@@ -146,6 +146,8 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     var pauseTick by remember { mutableIntStateOf(0) }
     fun userPause() { vm.player.pause(); userPaused = true; pauseTick++ }
     fun togglePause() { if (vm.player.playWhenReady) userPause() else vm.player.play() }
+    // Play/pause always ends fine mode: you're back to plain watching, no top bar.
+    fun leaveFine() { if (overlay == Overlay.FINE) overlay = Overlay.NONE }
 
     // Quick jump (← / → with no overlay): seeks right away, shows only the accumulated offset.
     var jumpTotal by remember { mutableLongStateOf(0L) }
@@ -265,19 +267,19 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                 }
                 val repeat = e.nativeKeyEvent.repeatCount
                 when (e.key) {
-                    Key.MediaPlayPause, Key.Spacebar -> { togglePause(); true }
-                    Key.MediaPlay -> { vm.player.play(); true }
-                    Key.MediaPause -> { userPause(); true }
+                    Key.MediaPlayPause, Key.Spacebar -> { leaveFine(); togglePause(); true }
+                    Key.MediaPlay -> { leaveFine(); vm.player.play(); true }
+                    Key.MediaPause -> { leaveFine(); userPause(); true }
                     Key.MediaRewind -> { quickSeek(false, repeat); true }
                     Key.MediaFastForward -> { quickSeek(true, repeat); true }
                     else -> when (overlay) {
                         Overlay.FINE -> when (e.key) {
                             Key.DirectionLeft -> { fine(false, repeat); true }
                             Key.DirectionRight -> { fine(true, repeat); true }
-                            // Sticky: only ↓ (or Back) leaves; ↑ just brings the bar back.
+                            // Sticky: only ↓, OK (play/pause) or Back leave; ↑ just brings the bar back.
                             Key.DirectionUp -> { fineBar = true; true }
                             Key.DirectionDown -> { overlay = Overlay.NONE; true }
-                            Key.DirectionCenter, Key.Enter -> { togglePause(); true }
+                            Key.DirectionCenter, Key.Enter -> { leaveFine(); togglePause(); true }
                             else -> false
                         }
                         Overlay.OSD -> when (e.key) {

@@ -64,7 +64,7 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Progress**: `marktime` every 30 s, on pause and on exit (via `AppContainer.appScope`);
   `toggle?status=1` at the end, then auto-advance (crossing seasons).
 - **Player overlay levels** (rule: ↓ reveals the next level, ↑ hides the current one):
-  NONE → ↑ FINE **mode** (top bar; ← → frame-step with EXACT seeks, pauses). Sticky: only ↓ or
+  NONE → ↑ FINE **mode** (top bar; ← → frame-step with EXACT seeks, pauses). Sticky: only ↓, OK (play/pause — returns to plain watching, no bar) or
   Back leave it; the bar hides after 3 s idle (`fineBar`) and returns on the next ← →/↑ ·
   NONE → ↓ OSD (seek bar with white position marker + stats line, **no hint text**; ← → scrub
   shows just the bar + target time — no preview frame, owner's call — commits ~0.9 s after
