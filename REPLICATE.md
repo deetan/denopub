@@ -17,7 +17,7 @@ Ask the person three things before you start (in plain words, in their language)
 
 | Path | When | Start |
 |---|---|---|
-| **A. Fork the source** (recommended) | the agent can read this repo (it is private: the owner must add the person as a collaborator, or hand over a clone/zip) | §2 below |
+| **A. Fork the source** (recommended) | the agent can read this repo — it is public: `git clone https://github.com/deetan/denopub` | §2 below |
 | **B. Rebuild from spec** | no access to the source, only a self-contained kit | `docs/lenapub-kit/START-HERE.md` → `PROMPT.md`. Spec frozen 2026-10-21: it predates the IMDb rating, prev/next episode cards and the Continue changes listed in `git log` after `a76677a`. Where kit and source differ, **the source wins**. |
 
 ## 2. Set up the Mac (skip what's installed)

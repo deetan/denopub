@@ -183,4 +183,4 @@ on the TV, installed with `scripts/tv.sh deploy`.
 
 ## License
 
-Private, © dt. Personal use.
+© dt. Personal project; public for reference, no license granted.

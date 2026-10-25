@@ -221,4 +221,4 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 ## Git / backup rule
 
 Commit after every meaningful change, with docs updated in the same commit, and push to
-`origin` = `github.com/deetan/denopub` (private, `main`; renamed from `kinopub-android-tv` 2026-10-25 — the old URL redirects). The local checkout stays at `~/Projects/kinopub-android-tv`.
+`origin` = `github.com/deetan/denopub` (public since 2026-10-25, `main`; renamed from `kinopub-android-tv` 2026-10-25 — the old URL redirects). The local checkout stays at `~/Projects/kinopub-android-tv`.
