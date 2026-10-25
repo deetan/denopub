@@ -12,7 +12,8 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 1. **`HANDOFF.md`** — current state, open items, how to resume, owner's preferences.
 2. `README.md` — what/why, architecture, setup, deploy over Wi-Fi.
 3. `docs/kinopub-api.md` — the API, with UNVERIFIED markers. Trust it over memory.
-4. Code: `data/Repository.kt` → `ui/home/HomeScreen.kt` → `ui/player/PlayerController.kt` →
+4. Asked to make a copy for someone else ("сделай так же")? → **`REPLICATE.md`**.
+5. Code: `data/Repository.kt` → `ui/home/HomeScreen.kt` → `ui/player/PlayerController.kt` →
    `ui/player/PlayerScreen.kt` → `ui/details/DetailsScreen.kt`.
 
 ## Mental model

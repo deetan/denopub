@@ -170,6 +170,7 @@ app/src/main/java/dev/dt/kinopub/
 docs/kinopub-api.md        kino.pub API reference (verified vs UNVERIFIED notes)
 docs/design-prompt.md      UI spec / prompt for visual design
 docs/brand-prompts.md      image prompts for icon, TV banner, splash mark
+REPLICATE.md               how an agent forks + rebrands this app for another person/TV
 docs/lenapub-kit/          self-contained prompt + assets + reference screenshots for a fresh Claude
                            to rebuild this app as "lenapub" for another TV (start: START-HERE.md)
 scripts/tv.sh              Wi-Fi deploy helper
