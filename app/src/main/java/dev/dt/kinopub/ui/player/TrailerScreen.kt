@@ -25,6 +25,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
@@ -59,13 +60,17 @@ fun TrailerScreen(c: AppContainer, url: String, title: String, onExit: () -> Uni
     var showTitle by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
+    val view = LocalView.current
     DisposableEffect(Unit) {
+        // Live channels run for hours with no key presses: without this the Google TV
+        // screensaver (Ambient mode) kicks in over the picture.
+        view.keepScreenOn = true
         val l = object : Player.Listener {
             override fun onPlaybackStateChanged(s: Int) { if (s == Player.STATE_ENDED) onExit() }
             override fun onPlayerError(e: androidx.media3.common.PlaybackException) { error = e.errorCodeName }
         }
         player.addListener(l)
-        onDispose { player.removeListener(l); player.release() }
+        onDispose { view.keepScreenOn = false; player.removeListener(l); player.release() }
     }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() }; delay(3_000); showTitle = false }
     BackHandler { onExit() }

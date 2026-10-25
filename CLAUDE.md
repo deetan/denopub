@@ -175,6 +175,9 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Root focus after the panel closes**: `requestFocus()` on the player root "succeeds" while a
   panel card is still focused during the fade-out; the card then vanished with focus and the
   remote went dead. The root retries until its own `onFocusChanged` says it holds focus.
+- **Every playback screen must set `view.keepScreenOn`** (`PlayerScreen` and `TrailerScreen`). Live
+  channels play in `TrailerScreen`, which lacked it, and the Google TV screensaver came up over a
+  live match after the idle timeout.
 - **`PlayerView` must be non-focusable** (`FOCUS_BLOCK_DESCENDANTS`) — it ate D-pad keys.
 - `BasicTextField` swallows the D-pad — Search moves focus out on ↓ manually.
 - An off-screen chip in a `LazyRow` isn't composed and can't take focus: rows scroll to the
