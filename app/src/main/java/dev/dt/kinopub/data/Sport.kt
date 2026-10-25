@@ -91,6 +91,25 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
         }
     }
 
+    /**
+     * The "↻" next to the row title: re-reads the channel list, the guide (even if fresh) and
+     * every still frame. [SportState.refreshing] is on meanwhile, so the button spins.
+     */
+    suspend fun refresh() {
+        if (_state.value.refreshing) return
+        _state.update { it.copy(refreshing = true) }
+        try {
+            attempt("tv") { loadChannels() }
+            attempt("epg") { ensureEpg(force = true) }
+            for (ch in _state.value.channels) {
+                val f = attempt("snap ${ch.name}") { snapshot(ch) }
+                _state.update { it.copy(snaps = if (f != null) it.snaps + (ch.name to f.path) else it.snaps - ch.name) }
+            }
+        } finally {
+            _state.update { it.copy(refreshing = false) }
+        }
+    }
+
     /** Like runCatching, but leaving Home (cancellation) really stops the loop. */
     private suspend fun <T> attempt(what: String, block: suspend () -> T): T? = try {
         block()
@@ -114,11 +133,11 @@ class Sport(private val api: KinopubApi, http: OkHttpClient, private val dir: Fi
     private fun loadEpg(): EpgCache? = runCatching { json.decodeFromString(EpgCache.serializer(), epgFile.readText()) }.getOrNull()
 
     /** Re-download when older than 12 h or when the guide no longer reaches 3 h ahead. */
-    private suspend fun ensureEpg() = epgLock.withLock {
+    private suspend fun ensureEpg(force: Boolean = false) = epgLock.withLock {
         val now = System.currentTimeMillis()
         val cached = loadEpg()
         val reaches = cached?.progs?.values?.flatten()?.maxOfOrNull { it.stop } ?: 0L
-        if (cached != null && cached.version == EPG_VERSION && now - cached.fetchedAt < 12 * HOUR && reaches > now + 3 * HOUR) return@withLock
+        if (!force && cached != null && cached.version == EPG_VERSION && now - cached.fetchedAt < 12 * HOUR && reaches > now + 3 * HOUR) return@withLock
         val wanted = lineup.map { it.second }.toSet() + titleSources.values
         val t0 = System.currentTimeMillis()
         val progs = withContext(Dispatchers.IO) {
@@ -381,6 +400,7 @@ data class SportState(
     val channels: List<SportChannel> = emptyList(),
     val epg: Map<String, List<Programme>> = emptyMap(),
     val snaps: Map<String, String> = emptyMap(),
+    val refreshing: Boolean = false,
 ) {
     fun now(ch: SportChannel, at: Long = System.currentTimeMillis()): Programme? =
         epg[ch.epgId]?.firstOrNull { at >= it.start && at < it.stop }

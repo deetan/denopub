@@ -45,7 +45,8 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   changes so Coil reloads). Frames refresh every 5 min, per channel only when stale, and only while
   Home is composed **and the app is STARTED** (`repeatOnLifecycle`) — never during playback or with
   the TV off (Home stays composed in the background; it used to keep fetching). OK plays the live
-  stream in `TrailerScreen`. **Live preview** (`ui/home/LivePreview.kt`): the focused sport card
+  stream in `TrailerScreen`. A round **↻** next to the «Спорт» title (`RefreshButton`, `Sport.refresh`)
+  re-reads the channels, the guide (even if fresh) and every frame; it spins while `SportState.refreshing`. **Live preview** (`ui/home/LivePreview.kt`): the focused sport card
   plays its channel muted in a TextureView after a 0.7 s dwell; one shared ExoPlayer, audio track
   type disabled, stopped on blur / app stop; the still frame stays until `onRenderedFirstFrame`. `SportCard` (`ui/common/Cards.kt`): channel name on the frame, the
   programme title in full under the card (up to 3 lines) + "до HH:mm" — the owner wants the whole title.
@@ -155,6 +156,11 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   shift that lines up the most starts (self-calibrating across DST) and falls back to the Polish
   title. Verified against live frames 2026-10-19. `EpgCache.version` forces a re-download when
   the stored ids change.
+- **The guide itself is sometimes wrong**, not our mapping. Checked 2026-10-25 against live frames: all
+  Match/Okko Футбол/Чемпионат rows matched. Okko Прайм (`okko-sport-2`, display name «Окко.Прайм Спорт»)
+  was simulcasting Okko Спорт's figure skating while the guide said football. Eurosport 1 showed show
+  jumping during the listed snooker final, probably filler after the match. Don't remap a channel
+  on one mismatch.
 - **Snapshot decoding**: software decoder preferred (`isSoftwareOnly`), so frames never touch the
   HW decoder. Android's TS `MediaExtractor` doesn't see the video of **interlaced** streams
   (Eurosport 2 is 1080i — it reported 1 track, audio): `Sport.videoPes` demuxes the H.264 PES

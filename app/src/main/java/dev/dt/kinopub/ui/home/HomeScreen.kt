@@ -61,6 +61,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -276,7 +279,7 @@ fun HomeScreen(
         }
 
         if (sport.channels.isNotEmpty()) item("sport") {
-            Section("Спорт") {
+            Section("Спорт", action = { RefreshButton(sport.refreshing) { scope.launch { c.sport.refresh() } } }) {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = K.screenPadH),
                     horizontalArrangement = Arrangement.spacedBy(K.cardGap),
@@ -399,7 +402,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.posterRow(
 }
 
 @Composable
-private fun Section(title: String, badge: String? = null, content: @Composable () -> Unit) {
+private fun Section(
+    title: String,
+    badge: String? = null,
+    action: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             Modifier.padding(horizontal = K.screenPadH),
@@ -408,8 +416,36 @@ private fun Section(title: String, badge: String? = null, content: @Composable (
         ) {
             Text(title, style = MaterialTheme.typography.headlineSmall, color = K.text)
             badge?.let { Badge(it) }
+            action?.invoke()
         }
         content()
+    }
+}
+
+/** Small round "↻" by a row title; spins while [busy]. */
+@Composable
+private fun RefreshButton(busy: Boolean, onClick: () -> Unit) {
+    val spin = androidx.compose.animation.core.rememberInfiniteTransition(label = "spin")
+    val angle by spin.animateFloat(
+        0f, 360f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.LinearEasing)),
+        label = "angle",
+    )
+    androidx.tv.material3.Surface(
+        onClick = { if (!busy) onClick() },
+        colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = K.surfaceHi,
+        ),
+        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.CircleShape),
+        modifier = Modifier.size(36.dp),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                "↻", style = MaterialTheme.typography.titleLarge, color = if (busy) K.text else K.muted,
+                modifier = Modifier.graphicsLayer { rotationZ = if (busy) angle else 0f },
+            )
+        }
     }
 }
 
