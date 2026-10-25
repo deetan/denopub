@@ -9,7 +9,7 @@ disagrees.
 **denopub** is the owner's personal Android TV client for kino.pub, sideloaded onto a **Chromecast
 with Google TV (Android 14)** plugged into a **Hisense U8Q running VIDAA**. One user, remote only.
 The core job: switch on the TV and resume what you're watching in one click. It's built with
-Kotlin, Compose for TV and Media3 ExoPlayer. The repo is `github.com/deetan/kinopub-android-tv`
+Kotlin, Compose for TV and Media3 ExoPlayer. The repo is `github.com/deetan/denopub` (formerly `kinopub-android-tv`)
 (private, branch `main`).
 
 ## Current state: works, in daily use on the real TV
