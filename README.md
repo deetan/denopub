@@ -26,7 +26,11 @@ IMDb/kino.pub trailers, and a **rate on IMDb** button (1–10, shows your curren
 movie ends — or you leave it in the last 10 % — the TV asks once for an IMDb rating (skipped if you
 rated it already). Ratings go to your IMDb account through the [movies](https://github.com/deetan/movies)
 service (den.tanaev.su/movies), which holds the IMDb session; the TV is paired once with a code
-from its *Ratings & sync → Add another device*. There's a search screen (movies / serials filter) behind **Поиск**.
+from its *Ratings & sync → Add another device*. While playing, a soft **«Пропустить заставку» /
+«Пропустить пересказ» / «Следующая серия ›»** button appears for a few seconds when a known
+intro, recap or credits starts (OK presses it); times come from the free crowdsourced databases
+TheIntroDB and IntroDB by IMDb id, so most Western series and films have them and most Russian ones
+don't. Short title cards (< 20 s) get no button. There's a search screen (movies / serials filter) behind **Поиск**.
 
 The player has three levels: ↓ shows the seek bar (← → scrub with a preview frame, faster the
 longer you hold), ↓ again opens one row each for voiceover, subtitles and quality (every option
@@ -156,6 +160,7 @@ app/src/main/java/dev/dt/kinopub/
   data/api/ImdbClient.kt   IMDb plot + trailers (unofficial GraphQL)
   data/api/ImdbRater.kt    your IMDb rating: read (public GraphQL), write via the movies service
   ui/common/RateDialog.kt  1–10 rating dialog + one-time pairing-code entry
+  data/api/SkipSegments.kt intro / recap / credits times (TheIntroDB + IntroDB, merged)
   data/prefs/LocalPrefs.kt track choices, wishlist seen-set, kids flags, recency stamps
   data/Repository.kt       home assembly, resume-point logic, wishlist folder
   ui/Navigation.kt         routes: auth, home, details/{id}, player/{id}?season&episode&start

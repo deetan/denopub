@@ -23,6 +23,8 @@ import dev.dt.kinopub.data.ResumeTarget
 import dev.dt.kinopub.data.api.AudioTrack
 import dev.dt.kinopub.data.api.Item
 import dev.dt.kinopub.data.api.MediaFile
+import dev.dt.kinopub.data.api.Segment
+import dev.dt.kinopub.data.api.SegmentKind
 import dev.dt.kinopub.data.api.Video
 import dev.dt.kinopub.data.prefs.TrackChoice
 import kotlinx.coroutines.Job
@@ -102,6 +104,11 @@ class PlayerController(
     private var progressJob: Job? = null
     // Positions saved during this session (kino.pub's copy in [item] is from when playback started).
     private val savedSec = mutableMapOf<Pair<Int?, Int>, Int>()
+
+    // Skippable intro / recap / credits of the current episode (empty until known, or unknown).
+    private val _segments = MutableStateFlow<List<Segment>>(emptyList())
+    val segments: StateFlow<List<Segment>> = _segments
+    private var segmentsJob: Job? = null
 
     private val _rate = MutableStateFlow<RatePrompt?>(null)
     val rate: StateFlow<RatePrompt?> = _rate
@@ -209,6 +216,8 @@ class PlayerController(
         player.prepare()
         player.playWhenReady = true
 
+        loadSegments(it, target, v)
+
         val cards = episodeCards(it, target)
         val at = cards.indexOfFirst { e -> e.current }
         _ui.value = PlayerUi(
@@ -222,6 +231,49 @@ class PlayerController(
             episodes = cards,
             qualities = qualityOptions(v.files, f),
         )
+    }
+
+    private fun loadSegments(it: Item, target: ResumeTarget, v: Video) {
+        segmentsJob?.cancel()
+        _segments.value = emptyList()
+        val imdbId = it.imdb ?: return
+        // Movies: only single-part ones (the databases know the film, not kino.pub's parts).
+        if (target.season == null && it.videos.size > 1) return
+        segmentsJob = viewModelScope.launch {
+            val all = c.skips.forEpisode(imdbId, target.season, target.season?.let { target.episode }, v.duration)
+            _segments.value = all.filter { s ->
+                val len = (s.endMs ?: (v.duration * 1000L)) - s.startMs
+                // A short title card isn't worth a button.
+                len >= if (s.kind == SegmentKind.CREDITS) MIN_CREDITS_MS else MIN_OPENING_MS
+            }
+        }
+    }
+
+    /** True when skipping these credits ends the episode and starts the next one. */
+    fun creditsLeadToNext(s: Segment): Boolean {
+        val it = item ?: return false
+        return !hasSceneAfter(s) && c.repository.nextOf(it, current.season, current.episode) != null
+    }
+
+    // A post-credits scene: the credits end well before the file does (IntroDB's outro end is
+    // usually the file's end to the second; 30 s of slack for other releases).
+    private fun hasSceneAfter(s: Segment): Boolean {
+        val end = s.endMs ?: return false
+        val dur = player.duration.takeIf { it > 0 } ?: return false
+        return end < dur - 30_000
+    }
+
+    /** OK on the skip button. */
+    fun skip(s: Segment) {
+        player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
+        when {
+            s.kind != SegmentKind.CREDITS -> player.seekTo(s.endMs ?: return)
+            hasSceneAfter(s) -> player.seekTo(s.endMs!!)
+            // Same as playing to the end: watched, then the next episode — or, for a movie / the
+            // last episode, the end of the file (STATE_ENDED → rating prompt).
+            creditsLeadToNext(s) -> onEnded()
+            else -> player.seekTo(player.duration.coerceAtLeast(0))
+        }
     }
 
     /** Best file not above the quality cap; at equal height prefer HEVC (that is where HDR lives). */
@@ -583,6 +635,9 @@ class PlayerController(
     }
 
     companion object {
+        const val MIN_OPENING_MS = 20_000L
+        const val MIN_CREDITS_MS = 15_000L
+
         fun subtitleMime(url: String): String = when {
             url.contains(".vtt", true) -> MimeTypes.TEXT_VTT
             url.contains(".ass", true) || url.contains(".ssa", true) -> MimeTypes.TEXT_SSA

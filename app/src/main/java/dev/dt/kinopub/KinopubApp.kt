@@ -49,6 +49,7 @@ class AppContainer(app: Application) {
     val watchNext = dev.dt.kinopub.system.WatchNext(app)
     val imdb = dev.dt.kinopub.data.api.ImdbClient(http)
     val rater = dev.dt.kinopub.data.api.ImdbRater(http, prefs)
+    val skips = dev.dt.kinopub.data.api.SkipSegments(http)
     val sport = dev.dt.kinopub.data.Sport(api, http, app.filesDir)
 
     /** A "resume this" request from a deep link (Google TV Continue watching row). */

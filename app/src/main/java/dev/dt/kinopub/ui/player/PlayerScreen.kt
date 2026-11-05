@@ -14,6 +14,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -76,6 +77,8 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import dev.dt.kinopub.AppContainer
 import dev.dt.kinopub.data.ResumeTarget
+import dev.dt.kinopub.data.api.Segment
+import dev.dt.kinopub.data.api.SegmentKind
 import dev.dt.kinopub.ui.common.ProgressLine
 import dev.dt.kinopub.ui.common.RateDialog
 import dev.dt.kinopub.ui.common.splitTitle
@@ -103,6 +106,8 @@ private fun fineStepMs(heldMs: Long) = when {
  *   ← / → (video)    → quick jump: a bare seek bar at the bottom, no text. Steps grow over a burst
  *                      of presses / a hold: 3 s ×3 → 5 s ×3 → 10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min
  *   OK / play-pause  → pause/resume; a big pause sign fades into a small corner badge
+ *   OK (skip button) → while «Пропустить заставку / титры» / «Следующая серия» is up (first ~8 s
+ *                      of a known intro, recap or credits, with no overlay open): skip it
  *   audio-track key  → next voiceover         CC key → subtitles on/off
  *   Back             → panel → OSD, scrub → cancel, otherwise exit (progress is saved)
  */
@@ -244,6 +249,24 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
         commitScrub()
     }
 
+    // Skip button: shown for a few seconds when playback enters a known intro / recap / credits
+    // stretch, then gone (OK goes back to pause). Seeking back into it brings it back.
+    val segments by vm.segments.collectAsState()
+    val active: Segment? = segments.firstOrNull { s -> pos >= s.startMs && pos < (s.endMs ?: dur) - 2_000 }
+    var skipVisible by remember { mutableStateOf(false) }
+    var skipShown by remember { mutableStateOf<Segment?>(null) } // already offered, until we leave it
+    val bare = overlay == Overlay.NONE
+    LaunchedEffect(active, bare) {
+        if (active == null) { skipShown = null; skipVisible = false; return@LaunchedEffect }
+        // The window only runs with nothing else on screen (the player opens with the OSD up).
+        if (!bare || skipShown == active) return@LaunchedEffect
+        skipVisible = true
+        delay(if (active.kind == SegmentKind.CREDITS) 10_000 else 8_000)
+        skipVisible = false
+        skipShown = active
+    }
+    val canSkip = skipVisible && active != null && overlay == Overlay.NONE && ui.error == null
+
     BackHandler {
         when {
             overlay == Overlay.TRACKS -> overlay = Overlay.OSD
@@ -312,8 +335,12 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                             Key.DirectionDown -> { overlay = Overlay.OSD; true }
                             Key.DirectionLeft -> { quickSeek(false, repeat); true }
                             Key.DirectionRight -> { quickSeek(true, repeat); true }
-                            // Just pause/resume: the pause sign is enough, no seek bar.
-                            Key.DirectionCenter, Key.Enter -> { togglePause(); true }
+                            Key.DirectionCenter, Key.Enter -> {
+                                if (canSkip) { skipVisible = false; vm.skip(active!!) }
+                                // Just pause/resume: the pause sign is enough, no seek bar.
+                                else togglePause()
+                                true
+                            }
                             else -> false
                         }
                     }
@@ -371,6 +398,37 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     .padding(horizontal = K.screenPadH, vertical = 20.dp),
             ) {
                 SeekBar(pos, dur, null, emphasized = false)
+            }
+        }
+
+        // Soft skip button, bottom right (Netflix-style): fades in, OK presses it.
+        AnimatedVisibility(
+            visible = canSkip,
+            enter = fadeIn(tween(400)), exit = fadeOut(tween(600)),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = K.screenPadH, bottom = 64.dp),
+        ) {
+            val s = active
+            val label = when {
+                s == null -> ""
+                s.kind == SegmentKind.RECAP -> "Пропустить пересказ"
+                s.kind == SegmentKind.INTRO -> "Пропустить заставку"
+                vm.creditsLeadToNext(s) -> "Следующая серия ›"
+                else -> "Пропустить титры"
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.clip(RoundedCornerShape(24.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .border(BorderStroke(1.5.dp, Color.White.copy(alpha = 0.6f)), RoundedCornerShape(24.dp))
+                    .padding(horizontal = 22.dp, vertical = 10.dp),
+            ) {
+                Text(label, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.92f))
+                Text(
+                    "OK", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.clip(RoundedCornerShape(4.dp)).border(BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                )
             }
         }
 

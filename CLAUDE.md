@@ -108,6 +108,17 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   device*, 8 chars, 10 min); a `DEVICE` error wipes it and asks again. `PlayerController.offerRating`
   prompts at STATE_ENDED or on Back in the last 10 % of a **movie** (no next part), once per title
   (`imdb_rate_asked`), only if unrated. Title card button «Оценить на IMDb» / «Моя оценка ★ N».
+- **Skip intro / credits** (`data/api/SkipSegments.kt`, `PlayerController.loadSegments/skip`,
+  button in `PlayerScreen`): per episode, TheIntroDB + IntroDB by IMDb id (`Item.imdb` is the
+  series id; movies only when single-part). Merge: both present → must overlap (else dropped);
+  intro = earlier start/earlier end, credits = earlier start/earlier end. Dropped if it doesn't fit
+  our file (openings in the first third, credits in the last 30 % and ≤ 8 min). Button only for
+  openings ≥ 20 s / credits ≥ 15 s, visible 8 s (credits 10 s) with no overlay open; while visible
+  OK = skip, otherwise OK pauses as always. Credits skip: post-credits scene (credits end > 30 s
+  before the file end) → seek past the credits; next episode exists → `onEnded()` (watched + next);
+  else seek to the end (→ rating prompt). kino.pub voiceovers are audio tracks over the original
+  video, so the databases' timeline matches (Silo S1E3: IntroDB outro end = file end to 0.5 s).
+  Log line `skip tt…/s/e tidb=… idb=… -> …` explains every decision.
 - **Home** is compact: 92 dp two-column header (title | episode · time left · progress), 160 dp
   cards with one-line captions → ~3.5 rows visible. Cached on disk (`filesDir/home.json`) and shown
   instantly; fresh data replaces it. Back: first to the first card, then a second Back within

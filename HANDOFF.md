@@ -166,3 +166,11 @@ instead.
     card, via the movies service (den.tanaev.su/movies) — its IMDb session cookie never leaves that
     server; the TV holds only a per-device key from a pairing code. Movies only at the end; series
     are rated from the title card.
+- **2026-11-05:**
+  - Skip intro / recap / credits button (Netflix-style). kino.pub has no markers; times come from
+    TheIntroDB (`api.theintrodb.org/v2/media`) and IntroDB (`api.introdb.app/segments`), both keyless,
+    by IMDb id + season/episode. When both answer they must overlap or the kind is dropped (they
+    disagree on some titles). Shown only for ≥ 20 s openings / ≥ 15 s credits, for 8–10 s with no
+    overlay open. Credits → «Следующая серия ›» = played to the end (marked watched, next starts).
+    Sampled 15/16 Western series covered; Маша и Медведь not. Next step if wanted: a self-tagging
+    script (Chromaprint over the HLS audio of 2+ episodes of a season) for titles the databases lack.
