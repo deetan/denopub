@@ -226,7 +226,9 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     // Auto-hide: OSD after 4 s, the fine bar after 3 s of no input (not while scrubbing).
     LaunchedEffect(overlay, lastInput, scrubMs == null) {
         when (overlay) {
-            Overlay.OSD -> if (scrubMs == null) { delay(4_000); if (vm.player.isPlaying) overlay = Overlay.NONE }
+            // playWhenReady, not isPlaying: a stream still buffering at 4 s kept the OSD up for good
+            // (and with it hid the skip button). Paused by the owner → the OSD stays.
+            Overlay.OSD -> if (scrubMs == null) { delay(4_000); if (vm.player.playWhenReady) overlay = Overlay.NONE }
             Overlay.FINE -> { fineBar = true; delay(3_000); fineBar = false }
             else -> Unit
         }
@@ -336,6 +338,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                             Key.DirectionLeft -> { quickSeek(false, repeat); true }
                             Key.DirectionRight -> { quickSeek(true, repeat); true }
                             Key.DirectionCenter, Key.Enter -> {
+                                if (canSkip) android.util.Log.i("denopub", "skip: OK on $active")
                                 if (canSkip) { skipVisible = false; vm.skip(active!!) }
                                 // Just pause/resume: the pause sign is enough, no seek bar.
                                 else togglePause()

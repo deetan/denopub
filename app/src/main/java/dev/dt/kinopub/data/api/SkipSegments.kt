@@ -112,8 +112,16 @@ class SkipSegments(private val http: OkHttpClient) {
                     // End: the earlier known one (a post-credits scene may follow).
                     Segment(k, minOf(x.startMs, y.startMs), listOfNotNull(x.endMs, y.endMs).minOrNull())
                 } else {
-                    // Never skip past what both call the intro: land on the earlier end.
-                    Segment(k, minOf(x.startMs, y.startMs), minOf(x.endMs ?: Long.MAX_VALUE, y.endMs ?: Long.MAX_VALUE).takeIf { it != Long.MAX_VALUE })
+                    // Ends within 20 s: take the later one — Silo S1E3 TheIntroDB 3:25.6 still left
+                    // 16 s of title cards + fade, IntroDB's 3:42 was exact. Further apart: the
+                    // earlier one, so a bad entry can't swallow much story.
+                    val ends = listOfNotNull(x.endMs, y.endMs)
+                    val end = when {
+                        ends.isEmpty() -> null
+                        ends.size == 2 && ends.max() - ends.min() <= 20_000 -> ends.max()
+                        else -> ends.min()
+                    }
+                    Segment(k, minOf(x.startMs, y.startMs), end)
                 }
             }
         }

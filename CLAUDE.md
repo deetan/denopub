@@ -111,7 +111,7 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Skip intro / credits** (`data/api/SkipSegments.kt`, `PlayerController.loadSegments/skip`,
   button in `PlayerScreen`): per episode, TheIntroDB + IntroDB by IMDb id (`Item.imdb` is the
   series id; movies only when single-part). Merge: both present → must overlap (else dropped);
-  intro = earlier start/earlier end, credits = earlier start/earlier end. Dropped if it doesn't fit
+  intro = earlier start, later end if the ends are ≤ 20 s apart else the earlier; credits = earlier start/earlier end. Dropped if it doesn't fit
   our file (openings in the first third, credits in the last 30 % and ≤ 8 min). Button only for
   openings ≥ 20 s / credits ≥ 15 s, visible 8 s (credits 10 s) with no overlay open; while visible
   OK = skip, otherwise OK pauses as always. Credits skip: post-credits scene (credits end > 30 s
@@ -192,6 +192,8 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Root focus after the panel closes**: `requestFocus()` on the player root "succeeds" while a
   panel card is still focused during the fade-out; the card then vanished with focus and the
   remote went dead. The root retries until its own `onFocusChanged` says it holds focus.
+- **OSD auto-hide checks `playWhenReady`, not `isPlaying`**: a stream still buffering at the 4 s mark
+  kept the OSD up for good, and with it the skip button (shown only with no overlay).
 - **Every playback screen must set `view.keepScreenOn`** (`PlayerScreen` and `TrailerScreen`). Live
   channels play in `TrailerScreen`, which lacked it, and the Google TV screensaver came up over a
   live match after the idle timeout.
