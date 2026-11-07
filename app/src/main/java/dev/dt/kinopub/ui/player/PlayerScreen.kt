@@ -103,8 +103,8 @@ private fun fineStepMs(heldMs: Long) = when {
  *   ↓ once           → OSD: seek bar with position marker; ← → scrub with a preview frame, commits
  *                      ~1 s after release or on OK
  *   ↓ again          → TRACKS: voiceover / subtitles / quality panel; ↑ from its top row → OSD
- *   ← / → (video)    → quick jump: a bare seek bar at the bottom, no text. Steps grow over a burst
- *                      of presses / a hold: 3 s ×3 → 5 s ×3 → 10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min
+ *   ← / → (video)    → quick jump: seek bar at the bottom + how far the burst moved. Steps grow over a burst
+ *                      of presses / a hold: 2 s ×3 → 5 s ×3 → 10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min
  *   OK / play-pause  → pause/resume; a big pause sign fades into a small corner badge
  *   OK (skip button) → while «Пропустить заставку / титры» / «Следующая серия» is up (first ~8 s
  *                      of a known intro, recap or credits, with no overlay open): skip it
@@ -171,15 +171,18 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     var jumpForward by remember { mutableStateOf(true) }
     var jumpAt by remember { mutableLongStateOf(0L) }
     var jumpVisible by remember { mutableStateOf(false) }
+    var jumpOrigin by remember { mutableLongStateOf(0L) }   // position before the burst
+    var jumpTotal by remember { mutableLongStateOf(0L) }    // signed distance moved in the burst
     fun quickSeek(forward: Boolean, repeat: Int) {
         val now = System.currentTimeMillis()
         // Auto-repeat fires every ~50 ms: one step per 220 ms while held.
         if (repeat > 0 && now - jumpAt < 220) return
-        if (!(jumpVisible && jumpForward == forward && now - jumpAt < 1_500)) jumpSteps = 0
+        val from = vm.player.currentPosition
+        if (!(jumpVisible && jumpForward == forward && now - jumpAt < 1_500)) { jumpSteps = 0; jumpOrigin = from }
         jumpSteps++; jumpForward = forward; jumpAt = now
         val step = jumpStepMs(jumpSteps)
-        val from = vm.player.currentPosition
         val to = (from + if (forward) step else -step).coerceIn(0, maxOf(dur, 0))
+        jumpTotal = to - jumpOrigin
         jumpVisible = true
         vm.player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.EXACT)
         vm.player.seekTo(to)
@@ -389,7 +392,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
             )
         }
 
-        // Quick jump: just the seek bar at the bottom, no words — enough to see roughly where you are.
+        // Quick jump: the seek bar at the bottom and how far this burst moved ("−12 с", "+1 мин 30 с").
         AnimatedVisibility(
             visible = jumpVisible && overlay == Overlay.NONE,
             enter = fadeIn(tween(120)), exit = fadeOut(tween(400)),
@@ -400,7 +403,10 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f))))
                     .padding(horizontal = K.screenPadH, vertical = 20.dp),
             ) {
-                SeekBar(pos, dur, null, emphasized = false)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(jumpLabel(jumpTotal), style = MaterialTheme.typography.titleMedium, color = K.accent)
+                    SeekBar(pos, dur, null, emphasized = false)
+                }
             }
         }
 
@@ -543,14 +549,25 @@ private fun seekStepMs(heldMs: Long): Long = when {
     else -> 300_000L
 }
 
+/** Signed burst distance: "+2 с", "−45 с", "+1 мин 30 с". */
+private fun jumpLabel(ms: Long): String {
+    val sec = Math.round(kotlin.math.abs(ms) / 1000.0)
+    val sign = if (ms < 0) "−" else "+"
+    return sign + when {
+        sec < 60 -> "$sec с"
+        sec % 60 == 0L -> "${sec / 60} мин"
+        else -> "${sec / 60} мин ${sec % 60} с"
+    }
+}
+
 private fun stepLabel(ms: Long): String = if (ms >= 60_000) "${ms / 60_000} мин" else "${ms / 1000} с"
 
 /**
  * Quick-jump step by its number in the burst, kept gentle (5 min after ~10 presses was too much):
- * 3 s ×3 → 5 s ×3 → 10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min max.
+ * 2 s ×3 → 5 s ×3 → 10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min max.
  */
 private fun jumpStepMs(n: Int): Long = when {
-    n <= 3 -> 3_000L
+    n <= 3 -> 2_000L
     n <= 6 -> 5_000L
     n <= 10 -> 10_000L
     n <= 14 -> 30_000L

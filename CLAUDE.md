@@ -96,9 +96,10 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   until `hasFocus()` (it used to "succeed" while the panel was still expanding and cost an extra
   press). Panel open/close is ONE `expandVertically`/`shrinkVertically` — no outer
   `animateContentSize`, which lagged and made the bar "fall" after the panel vanished.
-  NONE → ← → = **quick jump**: seeks at once and shows only a bare thin seek bar at the bottom —
-  **no text at all** (owner's call). Step grows by step count within a burst (presses < 1.5 s
-  apart, or a hold throttled to one step per 220 ms), kept gentle, max 3 min: 3 s ×3 → 5 s ×3 →
+  NONE → ← → = **quick jump**: seeks at once and shows a thin seek bar at the bottom with
+  the signed distance this burst moved above it («−12 с», «+1 мин 30 с»; owner asked for it 2026-11-07,
+  replacing the earlier "no text at all"). Step grows by step count within a burst (presses < 1.5 s
+  apart, or a hold throttled to one step per 220 ms), kept gentle, max 3 min: 2 s ×3 → 5 s ×3 →
   10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min (`jumpStepMs`). Media ⏪/⏩ do the same.
   OK = pause/resume only: a big ❚❚ over a dimmed picture fades after 1.2 s into a small
   top-right badge. Pauses caused by frame stepping show **no** pause sign (it's a still frame
