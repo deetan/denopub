@@ -53,6 +53,19 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Wishlist** = bookmark folder `Wishlist` (also matches "Хочу посмотреть"), auto-created.
   "New" = not yet focused for 1.5 s on the TV. Removal repeats until `get-item-folders` confirms
   (kino.pub can store duplicates).
+- **Recommendations** (`data/Recommender.kt`, `data/api/MoviesRecs.kt`, `AppContainer.recs`): five
+  Home rows after the wishlist — «Новинки для вас · Y-3–Y», «Похоже на недавнее», «Смотреть с
+  ребёнком», «Вечер вдвоём», «Пересмотреть любимое». Source = the owner's movies service
+  `GET /movies/api/recommendations` (scored from his IMDb ratings, with reasons; keyless, `x-imdb-user`),
+  bucketed by IMDb genres/year (kids: Family/Animation/Adventure+Fantasy, never Horror/Thriller/Crime/War;
+  couple: Romance/Comedy/Drama/Mystery, no Animation/Family/Horror/Documentary); "similar" = kino.pub
+  `items/similar` of the last 4 history titles; rewatch = his 9–10★ "like" seeds. IMDb → kino.pub by
+  `items/search` on the English title + matching `imdb` id, cached forever (misses retried after 7 days).
+  Titles watched/started on kino.pub (`/watching` any status 1 or time > 0, plus history) are dropped.
+  Pools (≤ 40) rebuilt ≤ every 12 h in `appScope`, cached in `filesDir/recs.json`; the screen shows a
+  weighted shuffle of 14 per row (new daily, ↻ on the first row reshuffles, rebuilding if > 3 h old),
+  a title in one row only. The card caption is the reason (person / «как X» / «ваша ★N»). A service
+  snapshot older than 7 days triggers `POST /api/recommendations/compute`. `recs:` log lines explain it.
 - **Every user action writes to kino.pub**: watched = `watching/toggle?status=1|0` (episode,
   season, all seasons); "Начал смотреть" = `togglewatchlist` (serials) / `marktime` + local stamp
   (movies — kino.pub ignores a 1-second marktime, so the local stamp is what makes it show);
@@ -83,9 +96,10 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   until `hasFocus()` (it used to "succeed" while the panel was still expanding and cost an extra
   press). Panel open/close is ONE `expandVertically`/`shrinkVertically` — no outer
   `animateContentSize`, which lagged and made the bar "fall" after the panel vanished.
-  NONE → ← → = **quick jump**: seeks at once and shows only a bare thin seek bar at the bottom —
-  **no text at all** (owner's call). Step grows by step count within a burst (presses < 1.5 s
-  apart, or a hold throttled to one step per 220 ms), kept gentle, max 3 min: 3 s ×3 → 5 s ×3 →
+  NONE → ← → = **quick jump**: seeks at once and shows a thin seek bar at the bottom with
+  the signed distance this burst moved above it («−12 с», «+1 мин 30 с»; owner asked for it 2026-11-07,
+  replacing the earlier "no text at all"). Step grows by step count within a burst (presses < 1.5 s
+  apart, or a hold throttled to one step per 220 ms), kept gentle, max 3 min: 2 s ×3 → 5 s ×3 →
   10 s ×4 → 30 s ×4 → 1 min ×4 → 2 min ×4 → 3 min (`jumpStepMs`). Media ⏪/⏩ do the same.
   OK = pause/resume only: a big ❚❚ over a dimmed picture fades after 1.2 s into a small
   top-right badge. Pauses caused by frame stepping show **no** pause sign (it's a still frame
@@ -246,6 +260,10 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   (`VERSION_DOWNGRADE`, `-d` only works over a debuggable install) — reinstall the normal debug
   build with `adb install -r -d` afterwards. The updater stamps `shared_prefs/updater.xml`; on a
   debug build `run-as dev.dt.kinopub rm shared_prefs/updater.xml` forces a fresh check.
+- **Emulator kino.pub login can die** (2026-11-07: every call "Not authorized", Home showed only
+  `home.json`). Recommendations then build empty and are not cached; re-login needs the owner to
+  confirm a device code. Two sessions sharing the AVD also overwrite each other's installs — agree
+  who holds it first.
 
 ## What NOT to touch
 
