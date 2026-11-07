@@ -60,7 +60,9 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   bucketed by IMDb genres/year (kids: Family/Animation, or Adventure+Fantasy without Action — Life of Pi
   yes, Spider-Man no — never Horror/Thriller/Crime/War; couple: Romance or Comedy, no Animation/Family/
   Horror/Documentary/War); "similar" = kino.pub
-  `items/similar` of the last 4 history titles; rewatch = his 9–10★ "like" seeds. IMDb → kino.pub by
+  `items/similar` of the last 4 history titles; rewatch = his 9–10★ "like" seeds, **films only** (owner: nobody rewatches Game of Thrones / The
+  Office), ≥ 5 years old, not rated on IMDb in the last 3 years (`/api/recent` dates) and not in recent
+  kino.pub history. IMDb → kino.pub by
   `items/search` on the English title + matching `imdb` id, cached forever (misses retried after 7 days). Searches run 2 at a time with 4/8/12 s
   back-off on kino.pub's 429 "Rate limit exceeded" (5 parallel got 101 × 429 on the first build); a
   build with failed lookups rebuilds after 1 h instead of 12.

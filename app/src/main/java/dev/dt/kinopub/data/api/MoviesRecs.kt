@@ -30,6 +30,18 @@ class MoviesRecs(private val http: OkHttpClient) {
         }
     }
 
+    /** The owner's latest IMDb ratings, newest first (the service caps [limit] at 100). */
+    suspend fun recent(limit: Int = 100): List<ImdbRating> = withContext(Dispatchers.IO) {
+        val req = Request.Builder()
+            .url("${ImdbRater.BASE}/api/recent?limit=$limit")
+            .header("x-imdb-user", ImdbRater.USER)
+            .build()
+        http.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw ApiException(r.code, "recent ${r.code}")
+            json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(ImdbRating.serializer()), r.body!!.string())
+        }
+    }
+
     /**
      * Asks the service to recompute (a ~1 min background job there, rate-limited to once per
      * 6 h; a 429 is fine). Called when its snapshot is older than a week, so new IMDb ratings
@@ -72,4 +84,12 @@ data class ImdbRecReason(
     val title: String? = null,
     val myRating: Int? = null,
     val genre: String? = null,
+)
+
+/** One of the owner's IMDb ratings; [ratedAt] is IMDb's own date (ISO). */
+@Serializable
+data class ImdbRating(
+    val tconst: String,
+    @kotlinx.serialization.SerialName("my_rating") val myRating: Int? = null,
+    @kotlinx.serialization.SerialName("rated_at") val ratedAt: String? = null,
 )

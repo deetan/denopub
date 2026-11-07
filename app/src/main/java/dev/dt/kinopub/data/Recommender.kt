@@ -140,6 +140,7 @@ class Recommender(
         val moviesD = async { recs.list("movie") }
         val seriesD = async { runCatching { recs.list("series", 200) }.getOrNull() }
         val historyD = async { runCatching { api.history(1) + api.history(2) }.getOrDefault(emptyList()) }
+        val recentD = async { runCatching { recs.recent() }.getOrDefault(emptyList()) }
         val movies = moviesD.await()
         val series = seriesD.await()
         val history = historyD.await()
@@ -163,27 +164,34 @@ class Recommender(
         (m + s).flatMap { it.reasons }.filter { it.type == "like" && (it.myRating ?: 0) >= 9 && it.tconst != null }.forEach { r ->
             favs.getOrPut(r.tconst!!) { Fav(r.tconst, r.title.orEmpty(), r.myRating!!, 0) }.hits++
         }
-        val rewatch = favs.values.sortedByDescending { it.hits * it.my }.take(POOL)
+        // Not what he rated (= watched) in the last 3 years: a favourite seen recently isn't a rewatch.
+        val recentlyRated = recentD.await().filter { r ->
+            runCatching { t0 - java.time.Instant.parse(r.ratedAt).toEpochMilli() < REWATCH_GAP_MS }.getOrDefault(false)
+        }.map { it.tconst }.toSet()
+        val rewatch = favs.values.filter { it.tconst !in recentlyRated }.sortedByDescending { it.hits * it.my }.take(POOL)
 
         // ---- IMDb → kino.pub ----
         val map = ConcurrentHashMap(cache.map)
         val gate = Semaphore(2) // kino.pub answers 429 "Rate limit exceeded" to bursts of searches
         val failedN = java.util.concurrent.atomic.AtomicInteger()
-        suspend fun kp(tconst: String, title: String, y: Int?): Item? {
-            map[tconst]?.let { if (it.item != null || t0 - it.at < REMAP_MISS_MS) return it.item }
-            val num = tconst.removePrefix("tt").toLongOrNull() ?: return null
-            var found: List<Item>? = null
+        /** One kino.pub call through [gate], with 4/8/12 s back-off on 429. Null (counted) on failure. */
+        suspend fun <T> kpCall(label: String, block: suspend () -> T): T? {
             for (attempt in 0..3) {
-                val r = gate.withPermit { runCatching { api.search(title).items } }
-                found = r.getOrNull()
-                val e = r.exceptionOrNull() ?: break
+                val r = gate.withPermit { runCatching { block() } }
+                val e = r.exceptionOrNull() ?: return r.getOrNull()
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 if ((e as? dev.dt.kinopub.data.api.ApiException)?.code != 429 || attempt == 3) {
-                    Log.w(TAG, "recs: search '$title' failed: ${e.message?.take(160)}"); break
+                    Log.w(TAG, "recs: $label failed: ${e.message?.take(160)}"); break
                 }
                 kotlinx.coroutines.delay(4_000L * (attempt + 1)) // docs: wait a few seconds after a 429
             }
-            if (found == null) { failedN.incrementAndGet(); return null }
+            failedN.incrementAndGet()
+            return null
+        }
+        suspend fun kp(tconst: String, title: String, y: Int?): Item? {
+            map[tconst]?.let { if (it.item != null || t0 - it.at < REMAP_MISS_MS) return it.item }
+            val num = tconst.removePrefix("tt").toLongOrNull() ?: return null
+            val found = kpCall("search '$title'") { api.search(title).items } ?: return null
             val hit = found.firstOrNull { it.imdb == num && !it.type.equals("3D", true) }
                 ?: found.firstOrNull { it.imdb == null && it.year == y && original(it.title).equals(title, true) }
             map[tconst] = Mapped(hit?.lean(), t0)
@@ -196,8 +204,12 @@ class Recommender(
         val kidsD = async { mapRecs(kids) { listOfNotNull(why(it), it.year?.toString()).joinToString(" · ") } }
         val coupleD = async { mapRecs(couple) { listOfNotNull(why(it), it.year?.toString()).joinToString(" · ") } }
         val rewatchD = async {
-            rewatch.map { f -> async { kp(f.tconst, f.title, null)?.let { RecItem(it, "ваша ★${f.my}", (f.hits * f.my).toDouble()) } } }
+            // Films only (nobody rewatches Game of Thrones), at least 5 years old, not in recent
+            // kino.pub history.
+            val recentIds = history.map { it.item.id }.toSet()
+            rewatch.map { f -> async { kp(f.tconst, f.title, null)?.let { RecItem(it, listOfNotNull("ваша ★${f.my}", it.year?.toString()).joinToString(" · "), (f.hits * f.my).toDouble()) } } }
                 .awaitAll().filterNotNull()
+                .filter { it.item.type !in Item.SERIAL_TYPES && (it.item.year ?: 0) in 1..(year - 5) && it.item.id !in recentIds }
         }
         // kino.pub's "similar" for the last few titles watched here (newest first, interleaved).
         val seeds = history.map { it.item }.filterNot { it.type.equals("3D", true) }.distinctBy { it.id }.take(SIMILAR_SEEDS)
@@ -205,7 +217,7 @@ class Recommender(
             seeds.map { seed ->
                 async {
                     val name = seed.title.substringBefore(" / ").trim()
-                    gate.withPermit { runCatching { api.similar(seed.id) }.getOrDefault(emptyList()) }
+                    (kpCall("similar ${seed.id}") { api.similar(seed.id) } ?: emptyList())
                         .filter { (it.imdbRating ?: 7.0) >= 6.5 && !it.type.equals("3D", true) }
                         .take(12)
                         .mapIndexed { i, it -> RecItem(it.lean(), "как «$name»", 1.0 / (1 + i)) }
@@ -222,7 +234,7 @@ class Recommender(
             .filter { it !in touched && t0 - (checked[it] ?: 0L) > RECHECK_MS }
             .map { id ->
                 async {
-                    val info = gate.withPermit { runCatching { api.watching(id) }.getOrNull() } ?: return@async
+                    val info = kpCall("watching $id") { api.watching(id) } ?: return@async
                     val all = info.videos + info.seasons.flatMap { it.episodes }
                     if (all.any { it.status == 1 || it.time > 0 }) newlyTouched += id else checked[id] = t0
                 }
@@ -263,7 +275,8 @@ class Recommender(
         const val TAG = "denopub"
         const val POOL = 40
         /** Bump when the row rules change, so the TV rebuilds instead of waiting up to 12 h. */
-        const val VERSION = 2
+        const val VERSION = 4
+        const val REWATCH_GAP_MS = 3L * 365 * 86_400_000
         const val SIMILAR_SEEDS = 4
         const val MAX_AGE_MS = 12L * 3600_000
         const val RESHUFFLE_REBUILD_MS = 3L * 3600_000
