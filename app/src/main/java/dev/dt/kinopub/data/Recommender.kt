@@ -38,6 +38,7 @@ private data class Mapped(val item: Item? = null, val at: Long = 0)
 @Serializable
 private data class RecsCache(
     val version: Int = 0,                            // rows built by older rules are rebuilt at once
+    val sourceAt: String? = null,                    // movies service computedAt the rows came from
     val builtAt: Long = 0,
     val rows: List<RecRow> = emptyList(),
     val map: Map<String, Mapped> = emptyMap(),       // tconst → kino.pub item (null = not on kino.pub)
@@ -97,10 +98,21 @@ class Recommender(
     val state: StateFlow<RecsState> = _state
 
     /** Rebuild in the background if the rows are missing or older than [MAX_AGE_MS]. */
+    /**
+     * Rebuild in the background if the rows are missing, built by older rules, older than
+     * [MAX_AGE_MS] — or the movies service recomputed since (after a rating, a sync that found
+     * new ratings, or its nightly pass): one tiny request tells.
+     */
     fun ensure(force: Boolean = false) {
         if (_state.value.building) return
-        if (!force && cache.rows.isNotEmpty() && cache.version == VERSION && System.currentTimeMillis() - cache.builtAt < MAX_AGE_MS) return
+        val fresh = !force && cache.rows.isNotEmpty() && cache.version == VERSION &&
+            System.currentTimeMillis() - cache.builtAt < MAX_AGE_MS
         scope.launch {
+            if (fresh) {
+                val src = runCatching { recs.list("movie", 1).computedAt }.getOrNull()
+                if (src == null || src == cache.sourceAt) return@launch
+                Log.i(TAG, "recs: service recomputed ($src, rows from ${cache.sourceAt}), rebuilding")
+            }
             lock.withLock {
                 _state.update { it.copy(building = true) }
                 try {
@@ -235,6 +247,7 @@ class Recommender(
         if (failed > 0) Log.w(TAG, "recs: $failed lookups failed, rebuilding in 1 h")
         cache = RecsCache(
             version = VERSION,
+            sourceAt = if (rows.isEmpty()) cache.sourceAt else movies.computedAt,
             builtAt = when {
                 rows.isEmpty() -> cache.builtAt
                 failed > 0 -> t0 - MAX_AGE_MS + 3_600_000

@@ -67,8 +67,10 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   Titles watched/started on kino.pub (`/watching` any status 1 or time > 0, plus history) are dropped.
   Pools (≤ 40) rebuilt ≤ every 12 h in `appScope`, cached in `filesDir/recs.json`; the screen shows a
   weighted shuffle of 14 per row (new daily, ↻ on the first row reshuffles, rebuilding if > 3 h old),
-  a title in one row only. The card caption is the reason (person / «как X» / «ваша ★N»). A service
-  snapshot older than 7 days triggers `POST /api/recommendations/compute`. `recs:` log lines explain it.
+  a title in one row only. The card caption is the reason (person / «как X» / «ваша ★N»). Every Home start
+  also asks the service for its `computedAt` (`limit=1`); if it moved since the rows were built
+  (the service recomputes 2 min after a rating, after a sync that changed ratings, and nightly), the
+  TV rebuilds. A service snapshot older than 7 days triggers `POST /api/recommendations/compute`. `recs:` log lines explain it.
 - **Every user action writes to kino.pub**: watched = `watching/toggle?status=1|0` (episode,
   season, all seasons); "Начал смотреть" = `togglewatchlist` (serials) / `marktime` + local stamp
   (movies — kino.pub ignores a 1-second marktime, so the local stamp is what makes it show);
