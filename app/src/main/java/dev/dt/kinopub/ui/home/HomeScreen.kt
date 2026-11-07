@@ -347,6 +347,7 @@ fun HomeScreen(
                             image = w.item.posters?.medium,
                             subtitle = w.item.year?.toString(),
                             badge = if (w.isNew) "НОВОЕ" else null,
+                            serial = w.item.isSerial,
                             onClick = { onOpen(w.item.id) },
                             onLongClick = { itemMenu(w.item.id, splitTitle(w.item.title).first, inWishlist = true) },
                             modifier = Modifier
@@ -472,6 +473,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.posterRow(
                             .joinToString(" · "),
                         onClick = { onOpen(it.id) },
                         onLongClick = { onMenu(it) },
+                        serial = it.isSerial,
                         modifier = Modifier.track("$title:${it.id}"),
                     )
                 }

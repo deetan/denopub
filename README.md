@@ -15,7 +15,7 @@ is built around three jobs, in order of how often they come up:
 2. **Wishlist.** A kino.pub bookmark folder called `Wishlist`. Titles you haven't seen on the TV yet
    carry a "new" badge. *(Phase 2: send a screenshot from your phone to a bot, which recognizes
    the title and adds it.)*
-3. **Recommendations.** Five shuffled rows picked for you: new releases of the last three years,
+3. **Recommendations.** Five shuffled rows of films (no series) picked for you: new releases of the last three years,
    titles like what you watched recently, films to watch with a child, an evening for two, and
    favourites to rewatch. They come from your IMDb ratings (via the movies service) and kino.pub's
    "similar" titles, skip anything already watched, and show the reason under each card. The

@@ -183,11 +183,9 @@ class Recommender(
         val t0 = System.currentTimeMillis()
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
         val moviesD = async { recs.list("movie") }
-        val seriesD = async { runCatching { recs.list("series", 400) }.getOrNull() }
         val historyD = async { runCatching { api.history(1) + api.history(2) }.getOrDefault(emptyList()) }
         val recentD = async { runCatching { recs.recent() }.getOrDefault(emptyList()) }
         val movies = moviesD.await()
-        val series = seriesD.await()
         val history = historyD.await()
         val age = runCatching { t0 - java.time.Instant.parse(movies.computedAt).toEpochMilli() }.getOrDefault(0L)
         if (age > RECOMPUTE_AFTER_MS && !movies.computing) {
@@ -195,18 +193,19 @@ class Recommender(
             launch { recs.recompute() }
         }
         val m = movies.items
-        val s = series?.items.orEmpty()
-        Log.i(TAG, "recs: service ${m.size} movies, ${s.size} series (computed ${movies.computedAt}); history ${history.size}")
+        // Films only (owner, 2026-11-07): no series anywhere in the rows. A series he liked may
+        // still be the *reason* for a film («как «Сёгун»»).
+        Log.i(TAG, "recs: service ${m.size} movies (computed ${movies.computedAt}); history ${history.size}")
 
         // ---- candidate pools on the IMDb side ----
-        val fresh = (m + s).filter { (it.year ?: 0) >= year - 3 }.sortedByDescending { it.score }.take(POOL)
+        val fresh = m.filter { (it.year ?: 0) >= year - 3 }.sortedByDescending { it.score }.take(POOL)
         val kids = m.filter(::kidsOk).take(POOL)
         val couple = m.filter(::coupleOk)
             .sortedByDescending { it.score }.take(POOL)
         // The titles he rated 9–10 that drive his recommendations: favourites worth seeing again.
         data class Fav(val tconst: String, val title: String, val my: Int, var hits: Int)
         val favs = LinkedHashMap<String, Fav>()
-        (m + s).flatMap { it.reasons }.filter { it.type == "like" && (it.myRating ?: 0) >= 9 && it.tconst != null }.forEach { r ->
+        m.flatMap { it.reasons }.filter { it.type == "like" && (it.myRating ?: 0) >= 9 && it.tconst != null }.forEach { r ->
             favs.getOrPut(r.tconst!!) { Fav(r.tconst, r.title.orEmpty(), r.myRating!!, 0) }.hits++
         }
         // Not what he rated (= watched) in the last 3 years: a favourite seen recently isn't a rewatch.
@@ -263,7 +262,7 @@ class Recommender(
                 async {
                     val name = seed.title.substringBefore(" / ").trim()
                     (kpCall("similar ${seed.id}") { api.similar(seed.id) } ?: emptyList())
-                        .filter { (it.imdbRating ?: 7.0) >= 6.5 && !it.type.equals("3D", true) }
+                        .filter { (it.imdbRating ?: 7.0) >= 6.5 && !it.type.equals("3D", true) && !it.isSerial }
                         .take(12)
                         .mapIndexed { i, it -> RecItem(it.lean(), "как «$name»", 1.0 / (1 + i)) }
                 }
@@ -285,7 +284,7 @@ class Recommender(
                 }
             }.awaitAll()
         touched += newlyTouched
-        fun clean(p: List<RecItem>) = p.filter { it.item.id !in touched }.distinctBy { it.item.id }
+        fun clean(p: List<RecItem>) = p.filter { it.item.id !in touched && !it.item.isSerial }.distinctBy { it.item.id }
         val (freshP, similarP, kidsP, coupleP) = pools.map(::clean)
 
         val rows = listOf(
@@ -320,7 +319,7 @@ class Recommender(
         const val TAG = "denopub"
         const val POOL = 200
         /** Bump when the row rules change, so the TV rebuilds instead of waiting up to 12 h. */
-        const val VERSION = 6
+        const val VERSION = 7
         const val REWATCH_GAP_MS = 3L * 365 * 86_400_000
         const val SIMILAR_SEEDS = 4
         const val MAX_AGE_MS = 12L * 3600_000

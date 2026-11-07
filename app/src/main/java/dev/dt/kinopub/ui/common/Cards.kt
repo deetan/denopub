@@ -66,6 +66,7 @@ fun PosterCard(
     badge: String? = null,
     width: Dp = 150.dp,
     onLongClick: (() -> Unit)? = null,
+    serial: Boolean = false,
 ) {
     Column(modifier.width(width)) {
         Card(
@@ -79,6 +80,15 @@ fun PosterCard(
             Box(Modifier.fillMaxSize().background(K.surface)) {
                 AsyncImage(image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 badge?.let { Badge(it, modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)) }
+                // Quiet "this is a series" mark (owner, 2026-11-07); films carry none.
+                if (serial) Text(
+                    "сериал",
+                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
+                        .clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.8f),
+                )
             }
         }
         Text(

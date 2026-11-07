@@ -139,10 +139,10 @@ fun SearchScreen(c: AppContainer, onOpen: (Long) -> Unit) {
                     image = item.posters?.medium,
                     subtitle = listOfNotNull(
                         item.year?.toString(),
-                        if (item.type in Item.SERIAL_TYPES) "сериал" else null,
                         item.imdbRating?.let { "IMDb %.1f".format(it) },
                     ).joinToString(" · "),
                     onClick = { onOpen(item.id) },
+                    serial = item.isSerial,
                 )
             }
         }

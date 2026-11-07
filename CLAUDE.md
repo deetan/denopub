@@ -55,7 +55,9 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   (kino.pub can store duplicates).
 - **Recommendations** (`data/Recommender.kt`, `data/api/MoviesRecs.kt`, `AppContainer.recs`): five
   Home rows after the wishlist — «Новинки для вас · Y-3–Y», «Похоже на недавнее», «Смотреть с
-  ребёнком», «Вечер вдвоём», «Пересмотреть любимое». Source = the owner's movies service
+  ребёнком», «Вечер вдвоём», «Пересмотреть любимое». **Films only** (owner, 2026-11-07: no series in any row;
+  a series may still be the reason, «как «Сёгун»»): the TV no longer reads the service's series list,
+  and kino.pub `isSerial` items are dropped from every pool. Source = the owner's movies service
   `GET /movies/api/recommendations` (scored from his IMDb ratings, with reasons; keyless, `x-imdb-user`),
   bucketed by IMDb genres/year (kids: Family/Animation, or Adventure+Fantasy without Action — Life of Pi
   yes, Spider-Man no — never Horror/Thriller/Crime/War; couple: Romance or Comedy, no Animation/Family/
@@ -67,7 +69,7 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   back-off on kino.pub's 429 "Rate limit exceeded" (5 parallel got 101 × 429 on the first build); a
   build with failed lookups rebuilds after 1 h instead of 12.
   Titles watched/started on kino.pub (`/watching` any status 1 or time > 0, plus history) are dropped.
-  Pools (≤ 200; the service keeps 1000 movies + 400 series and the TV reads them all) rebuilt ≤ every 12 h in `appScope`, cached in `filesDir/recs.json`; the screen shows a
+  Pools (≤ 200; the service keeps 1000 movies + 400 series; the TV reads the 1000 movies) rebuilt ≤ every 12 h in `appScope`, cached in `filesDir/recs.json`; the screen shows a
   weighted shuffle of 20 per row (new daily). **Every row ends with a «↻ Другие» card** (`MoreCard`, no ↻ by the title; OK refreshes and focus jumps to the row's first card; `Recommender.refreshRow` →
   `RecsState.refreshed`): what's on screen there joins that row's `seen` set and the next pick comes
   from the rest, until the pool runs dry (then `seen` resets); also rebuilds if > 3 h old. A title
@@ -166,6 +168,9 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   relaunch from there is blocked as a background activity start — tested; the TV lands on the
   launcher). Feed URL =
   `BuildConfig.UPDATE_URL`, overridable with `-PupdateUrl=…` for a local test.
+- **Series mark**: `PosterCard(serial = true)` puts a quiet «сериал» tag (black 55 %, labelSmall)
+  bottom-left on the poster — wishlist, new/popular rows, search. Films carry none (owner asked for a
+  subtle mark, 2026-11-07).
 - **Focus is the UI.** Every screen requests initial focus on its primary action; lazy rows compose
   late, so focus requests retry briefly.
 
