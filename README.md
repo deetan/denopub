@@ -172,7 +172,7 @@ app/src/main/java/dev/dt/kinopub/
                            (fine bar / seek bar / tracks panel), TrailerScreen
   system/                  WatchNext (Google TV row, filtered), WakeService (inert, declined),
                            Updater (self-update from GitHub Releases + PackageInstaller)
-  ui/home/UpdateButton.kt  the ⬆ «Обновление» button on Home
+  ui/home/UpdateButton.kt  the ↑ «Обновить до …» button on Home
   ui/theme/Theme.kt        design tokens (object K)
 docs/kinopub-api.md        kino.pub API reference (verified vs UNVERIFIED notes)
 docs/design-prompt.md      UI spec / prompt for visual design
@@ -200,14 +200,14 @@ on the TV. Two ways to get a new version there:
   asset `denopub-X.Y.Z-<code>.apk`. The TV reads
   `api.github.com/repos/deetan/denopub/releases/latest` (public, no token) when Home starts or
   comes back to the foreground — at most every 3 h while nothing is new, every time while an update
-  is waiting. A newer `versionCode` adds a round **⬆** button left of «Поиск»; focused it reads
+  is waiting. A newer `versionCode` adds a round **↑** button left of «Поиск»; focused it reads
   «Обновить до X.Y.Z», OK downloads the APK (percentage on the button) and installs it with
   `PackageInstaller`. Only Home checks or installs — never during playback.
   First time only: Android asks to allow «Установка неизвестных приложений» for denopub (the
   button opens that screen; allow it, come back, press OK again), and the system installer asks to
   confirm. After the first self-update denopub is the installer of record, so later updates install
-  without a dialog (Android 12+ `USER_ACTION_NOT_REQUIRED`); the app relaunches itself
-  (`MY_PACKAGE_REPLACED`).
+  without a dialog (Android 12+ `USER_ACTION_NOT_REQUIRED`). After an update the TV is back on the
+  Google TV home screen — open denopub again (Android blocks a self-relaunch from the background).
 - **adb over Wi-Fi** (development): `scripts/tv.sh deploy`, as above.
 
 The signing key is `~/.android/debug.keystore` on the owner's Mac (cert SHA-256 `ef48301c…`, pinned

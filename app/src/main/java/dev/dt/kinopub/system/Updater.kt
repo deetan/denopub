@@ -58,7 +58,10 @@ class Updater(private val context: Context, private val http: OkHttpClient) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val prefs = context.getSharedPreferences("updater", Context.MODE_PRIVATE)
-    private val apk get() = File(context.cacheDir, "update/denopub.apk")
+    private val dir get() = File(context.cacheDir, "update")
+    // Named by versionCode: two builds can have the same size, and a size-only check once
+    // reinstalled the previous APK instead of the new one.
+    private fun apkFor(u: Available) = File(dir, "denopub-${u.versionCode}.apk")
 
     /** Reads the latest release, unless checked recently ([force] ignores that). */
     suspend fun checkForUpdate(force: Boolean = false) = withContext(Dispatchers.IO) {
@@ -75,7 +78,7 @@ class Updater(private val context: Context, private val http: OkHttpClient) {
         } else {
             prefs.edit().putLong("checked_at", now).apply()
             _state.value = State.Idle
-            apk.delete()
+            dir.deleteRecursively()
         }
     }
 
@@ -112,7 +115,7 @@ class Updater(private val context: Context, private val http: OkHttpClient) {
         try {
             download(update)
             _state.value = State.Installing(update)
-            withContext(Dispatchers.IO) { commit() }
+            withContext(Dispatchers.IO) { commit(apkFor(update)) }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             Log.w(TAG, "update: install failed: $e")
@@ -121,10 +124,11 @@ class Updater(private val context: Context, private val http: OkHttpClient) {
     }
 
     private suspend fun download(u: Available) = withContext(Dispatchers.IO) {
-        val f = apk
+        val f = apkFor(u)
         if (f.exists() && f.length() == u.size && u.size > 0) return@withContext
-        f.parentFile?.mkdirs()
-        val tmp = File(f.parentFile, "denopub.apk.part")
+        dir.deleteRecursively()
+        dir.mkdirs()
+        val tmp = File(dir, "${f.name}.part")
         _state.value = State.Downloading(u, 0)
         http.newCall(Request.Builder().url(u.url).header("User-Agent", "denopub-updater").build()).execute().use { r ->
             check(r.isSuccessful) { "HTTP ${r.code}" }
@@ -150,7 +154,7 @@ class Updater(private val context: Context, private val http: OkHttpClient) {
         Log.i(TAG, "update: downloaded ${f.length()} bytes")
     }
 
-    private fun commit() {
+    private fun commit(apk: File) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
@@ -210,13 +214,13 @@ class InstallResultReceiver : BroadcastReceiver() {
     }
 }
 
-/** After a self-update the process is gone; bring the app back up where the owner left it. */
+/**
+ * Logs the new version after a self-update. It can't bring the app back: Android blocks activity
+ * starts from the background (tested on the emulator), so the TV returns to the launcher.
+ */
 class UpdatedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         Log.i("denopub", "update: now ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-        runCatching {
-            context.startActivity(Intent(context, dev.dt.kinopub.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }.onFailure { Log.w("denopub", "update: relaunch refused: $it") }
     }
 }

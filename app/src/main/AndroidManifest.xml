@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Self-update (system/Updater.kt): install the APK from GitHub Releases. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android 12+: lets a self-update with USER_ACTION_NOT_REQUIRED skip the confirmation dialog
+         (normal permission, granted at install; without it the dialog shows every time). -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <!-- Watch Next ("Continue watching" on the Google TV home). -->
     <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
     <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA" />
@@ -42,7 +45,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Self-update: PackageInstaller session result, and relaunch after the update. -->
+        <!-- Self-update: PackageInstaller session result; log line after the update. -->
         <receiver android:name=".system.InstallResultReceiver" android:exported="false" />
         <receiver android:name=".system.UpdatedReceiver" android:exported="false">
             <intent-filter>

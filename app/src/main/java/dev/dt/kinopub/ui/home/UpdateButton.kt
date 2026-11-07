@@ -41,12 +41,12 @@ fun UpdateButton(updater: Updater, modifier: Modifier = Modifier) {
     val state by updater.state.collectAsState()
     val scope = rememberCoroutineScope()
     var focused by remember { mutableStateOf(false) }
-    // Compact (a round ⬆ / percentage) so it doesn't cover the hero's episode info; the full
+    // Compact (a round ↑ / percentage) so it doesn't cover the hero's episode info; the full
     // label shows only while focused.
     val (short, long) = when (val s = state) {
         is Updater.State.Idle -> return
-        is Updater.State.Ready -> "⬆" to "Обновить до ${s.update.versionName}"
-        is Updater.State.NeedsPermission -> "⬆" to "Разрешите установку и нажмите ещё раз"
+        is Updater.State.Ready -> "↑" to "Обновить до ${s.update.versionName}"
+        is Updater.State.NeedsPermission -> "↑" to "Разрешите установку и нажмите ещё раз"
         is Updater.State.Downloading -> "${s.percent}%" to "Загрузка ${s.percent} %"
         is Updater.State.Installing -> "…" to "Установка…"
         is Updater.State.Failed -> "!" to "Не удалось: ${s.message.take(60)} — ещё раз"
@@ -61,7 +61,10 @@ fun UpdateButton(updater: Updater, modifier: Modifier = Modifier) {
         modifier = modifier.height(40.dp).widthIn(min = 40.dp).onFocusChanged { focused = it.isFocused },
     ) {
         Box(Modifier.fillMaxHeight().padding(horizontal = if (focused) 16.dp else 8.dp), contentAlignment = Alignment.Center) {
-            Text(if (focused) long else short, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            Text(
+                if (focused) long else short, maxLines = 1,
+                style = if (focused || short.length > 1) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleLarge,
+            )
         }
     }
 }

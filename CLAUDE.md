@@ -126,10 +126,12 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Self-update** (`system/Updater.kt`, `ui/home/UpdateButton.kt`, `scripts/release.sh`): GitHub
   Releases on public `deetan/denopub`; asset `denopub-<name>-<code>.apk`, newer = higher
   `versionCode` than `BuildConfig.VERSION_CODE`. Checked only from Home (start + each foreground),
-  throttled to 3 h only while nothing is new. Round ⬆ left of «Поиск» (full label only when
+  throttled to 3 h only while nothing is new. Round ↑ left of «Поиск» (full label only when
   focused — a long label covered the hero's episode info). OK → "unknown apps" grant if missing →
   download to `cacheDir/update/` → `PackageInstaller` session (`InstallResultReceiver` starts the
-  confirm dialog) → `UpdatedReceiver` relaunches on `MY_PACKAGE_REPLACED`. Feed URL =
+  confirm dialog) → `UpdatedReceiver` only logs `update: now …` on `MY_PACKAGE_REPLACED` (a
+  relaunch from there is blocked as a background activity start — tested; the TV lands on the
+  launcher). Feed URL =
   `BuildConfig.UPDATE_URL`, overridable with `-PupdateUrl=…` for a local test.
 - **Focus is the UI.** Every screen requests initial focus on its primary action; lazy rows compose
   late, so focus requests retry briefly.
