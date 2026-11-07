@@ -101,11 +101,29 @@ fun DetailsScreen(
     var rating by remember { mutableStateOf(false) }
     LaunchedEffect(item?.imdb) { item?.imdb?.let { myRating = c.rater.myRating(dev.dt.kinopub.data.api.ImdbRater.tconst(it)) } }
     LaunchedEffect(id) { kpTrailer = runCatching { c.api.trailerUrl(id) }.getOrNull() }
-    // kino.pub's "similar titles", shown at the bottom (movies) or after the episodes (serials).
+    // «Похожие» at the bottom (movies) or after the episodes (serials): IMDb's "More like this"
+    // (owner prefers it to kino.pub's), each found on kino.pub; titles kino.pub lacks are skipped.
+    // Posters appear in IMDb's order as they're matched. No IMDb id / nothing found → kino.pub's.
     var similar by remember { mutableStateOf<List<Item>>(emptyList()) }
-    LaunchedEffect(id) {
-        similar = runCatching { c.api.similar(id) }.getOrDefault(emptyList())
-            .filter { s -> s.id != id && !s.type.equals("3D", true) }.distinctBy { s -> s.id }.take(24)
+    LaunchedEffect(item?.imdb != null) {
+        val cur = item ?: return@LaunchedEffect
+        fun ok(s: Item) = s.id != id && !s.type.equals("3D", true)
+        val fromImdb = cur.imdb?.let { c.imdb.moreLikeThis(it) }.orEmpty()
+        if (fromImdb.isNotEmpty()) {
+            val found = arrayOfNulls<Item>(fromImdb.size)
+            kotlinx.coroutines.coroutineScope {
+                fromImdb.forEachIndexed { i, r ->
+                    launch {
+                        found[i] = c.recs.kinopubFor(r.tconst, r.title, r.year)?.takeIf(::ok)
+                        similar = found.filterNotNull().distinctBy { s -> s.id }
+                    }
+                }
+            }
+            c.recs.saveMapping()
+            android.util.Log.i("denopub", "similar ${cur.imdb}: imdb ${fromImdb.size} -> kino.pub ${similar.size}")
+        }
+        if (similar.isEmpty()) similar = runCatching { c.api.similar(id) }.getOrDefault(emptyList())
+            .filter(::ok).distinctBy { s -> s.id }.take(24)
     }
 
     // Set by a "mark watched" write; once the re-read item is fully watched, offer an IMDb rating.

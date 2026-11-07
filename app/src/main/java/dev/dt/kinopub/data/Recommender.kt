@@ -118,6 +118,11 @@ class Recommender(
     private val lock = Mutex()
     private var cache: RecsCache = runCatching { json.decodeFromString(RecsCache.serializer(), file.readText()) }.getOrDefault(RecsCache())
 
+    /** IMDb → kino.pub, shared by the builds and the title card's «Похожие»; persisted with the rows. */
+    private val mapped = ConcurrentHashMap(cache.map)
+    /** kino.pub searches outside a build (title card), 2 at a time like the build's. */
+    private val lookupGate = Semaphore(2)
+
     private val _state = MutableStateFlow(RecsState(rows = cache.rows, dismissed = cache.dismissed))
     val state: StateFlow<RecsState> = _state
 
@@ -171,6 +176,40 @@ class Recommender(
     }
 
     /**
+     * The kino.pub title for an IMDb one (search by [title], match by IMDb id), cached for good
+     * (misses retried after a week); null when kino.pub doesn't have it. 429s back off 4/8/12 s.
+     */
+    suspend fun kinopubFor(tconst: String, title: String, year: Int?): Item? {
+        val now = System.currentTimeMillis()
+        mapped[tconst]?.let { if (it.item != null || now - it.at < REMAP_MISS_MS) return it.item }
+        val num = tconst.removePrefix("tt").toLongOrNull() ?: return null
+        var found: List<Item>? = null
+        for (attempt in 0..3) {
+            val r = lookupGate.withPermit { runCatching { api.search(title).items } }
+            val e = r.exceptionOrNull()
+            if (e == null) { found = r.getOrNull(); break }
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            if ((e as? dev.dt.kinopub.data.api.ApiException)?.code != 429 || attempt == 3) return null
+            kotlinx.coroutines.delay(4_000L * (attempt + 1))
+        }
+        val hit = found.orEmpty().firstOrNull { it.imdb == num && !it.type.equals("3D", true) }
+            ?: found.orEmpty().firstOrNull { it.imdb == null && it.year == year && original(it.title).equals(title, true) }
+        mapped[tconst] = Mapped(hit?.lean(), now)
+        return hit?.lean()
+    }
+
+    /** Persist lookups made outside a build (a build saves them itself). */
+    fun saveMapping() {
+        scope.launch {
+            if (lock.isLocked) return@launch
+            lock.withLock {
+                cache = cache.copy(map = HashMap(mapped))
+                runCatching { file.writeText(json.encodeToString(RecsCache.serializer(), cache)) }
+            }
+        }
+    }
+
+    /**
      * A row's ↻: other titles from that row's pool at once (not the ones just shown); also a
      * background rebuild when the data is older than a few hours.
      */
@@ -215,7 +254,7 @@ class Recommender(
         val rewatch = favs.values.filter { it.tconst !in recentlyRated }.sortedByDescending { it.hits * it.my }.take(POOL)
 
         // ---- IMDb → kino.pub ----
-        val map = ConcurrentHashMap(cache.map)
+        val map = mapped
         val gate = Semaphore(2) // kino.pub answers 429 "Rate limit exceeded" to bursts of searches
         val failedN = java.util.concurrent.atomic.AtomicInteger()
         /** One kino.pub call through [gate], with 4/8/12 s back-off on 429. Null (counted) on failure. */
@@ -310,7 +349,7 @@ class Recommender(
                 else -> t0
             },
             rows = rows.ifEmpty { cache.rows },
-            map = map, touched = touched, checked = checked, dismissed = cache.dismissed,
+            map = HashMap(map), touched = touched, checked = checked, dismissed = cache.dismissed,
         )
         runCatching { file.writeText(json.encodeToString(RecsCache.serializer(), cache)) }
     }

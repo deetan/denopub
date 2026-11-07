@@ -20,6 +20,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 data class ImdbVideo(val id: String, val name: String, val seconds: Int?, val thumbnail: String?, val url: String)
+data class ImdbSimilar(val tconst: String, val title: String, val year: Int?, val series: Boolean)
 data class ImdbInfo(val plot: String?, val rating: Double?, val videos: List<ImdbVideo>)
 
 /**
@@ -62,6 +63,33 @@ class ImdbClient(private val http: OkHttpClient) {
                 ImdbInfo(plot, rating, videos).also { cache[tt] = it }
             }
         }.getOrNull()
+    }
+
+    /**
+     * IMDb's own "More like this" for a title (what imdb.com shows under it), in IMDb's order.
+     * [ImdbSimilar.title] is the original title, which kino.pub search matches best.
+     */
+    suspend fun moreLikeThis(imdbNumericId: Long, n: Int = 24): List<ImdbSimilar> = withContext(Dispatchers.IO) {
+        val tt = "tt" + imdbNumericId.toString().padStart(7, '0')
+        runCatching {
+            val q = """{ title(id: "$tt") { moreLikeThisTitles(first: $n) { edges { node { id
+                titleText { text } originalTitleText { text } releaseYear { year } titleType { canHaveEpisodes } } } } } }"""
+            val body = buildJsonObject { put("query", q) }.toString().toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url("https://caching.graphql.imdb.com/")
+                .header("x-imdb-client-name", "imdb-web-next").post(body).build()
+            http.newCall(req).execute().use { r ->
+                val t = json.parseToJsonElement(r.body!!.string()).jsonObject["data"]!!.jsonObject["title"]!!.jsonObject
+                (t["moreLikeThisTitles"]?.jsonObject?.get("edges") as? JsonArray).orEmpty().mapNotNull { e ->
+                    val node = e.jsonObject["node"]?.jsonObject ?: return@mapNotNull null
+                    ImdbSimilar(
+                        tconst = node.path("id") ?: return@mapNotNull null,
+                        title = node.path("originalTitleText", "text") ?: node.path("titleText", "text") ?: return@mapNotNull null,
+                        year = node.path("releaseYear", "year")?.toIntOrNull(),
+                        series = node.path("titleType", "canHaveEpisodes") == "true",
+                    )
+                }
+            }
+        }.onFailure { android.util.Log.w("denopub", "imdb: more like $tt failed: $it") }.getOrDefault(emptyList())
     }
 
     private fun JsonObject.path(vararg keys: String): String? {
