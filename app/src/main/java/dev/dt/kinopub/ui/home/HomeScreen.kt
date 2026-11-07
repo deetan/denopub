@@ -338,23 +338,30 @@ fun HomeScreen(
         posterRow("Новые сериалы", data.freshSerials, onOpen, onMenu, track)
         posterRow("Популярное", data.hot, onOpen, onMenu, track)
     }
-        // Always-visible search entry, top-right; ↑ from the first row reaches it.
+        // Always-visible search entry, top-right; ↑ from the first row reaches it. A newer
+        // release adds «Обновление» to its left (ui/home/UpdateButton.kt).
+        Row(
+            Modifier.align(Alignment.TopEnd).padding(top = K.screenPadV, end = K.screenPadH),
+            horizontalArrangement = Arrangement.spacedBy(K.cardGap),
+        ) {
+        // The buttons float over the hero with no focusable neighbours below, so the default
+        // focus search can get stuck here. ↓ always goes back to the first card.
+        val backToCards = Modifier.onPreviewKeyEvent {
+            if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown)
+                runCatching { firstFocus.requestFocus() }.isSuccess else false
+        }
+        UpdateButton(c.updater, backToCards)
         OutlinedButton(
             onClick = onSearch,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = K.screenPadV, end = K.screenPadH)
-                // The button floats over the hero with no focusable neighbours, so the default
-                // focus search can get stuck here. ↓ / ← always go back to the first card.
+            modifier = backToCards
+                // ← from search: to the update button when it's shown, else back to the cards.
                 .onPreviewKeyEvent {
-                    if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (it.key) {
-                        Key.DirectionDown, Key.DirectionLeft ->
-                            runCatching { firstFocus.requestFocus() }.isSuccess
-                        else -> false
-                    }
+                    if (it.type != KeyEventType.KeyDown || it.key != Key.DirectionLeft) return@onPreviewKeyEvent false
+                    if (c.updater.state.value !is dev.dt.kinopub.system.Updater.State.Idle) false
+                    else runCatching { firstFocus.requestFocus() }.isSuccess
                 },
         ) { Text("Поиск") }
+        }
         if (exitArmed) {
             Text(
                 "Нажмите «Назад» ещё раз, чтобы выйти", color = K.text, style = MaterialTheme.typography.titleMedium,

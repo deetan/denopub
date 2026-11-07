@@ -123,6 +123,14 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   cards with one-line captions → ~3.5 rows visible. Cached on disk (`filesDir/home.json`) and shown
   instantly; fresh data replaces it. Back: first to the first card, then a second Back within
   2.5 s exits. Focus returns to the card you left (`HomeViewModel.lastFocusKey`).
+- **Self-update** (`system/Updater.kt`, `ui/home/UpdateButton.kt`, `scripts/release.sh`): GitHub
+  Releases on public `deetan/denopub`; asset `denopub-<name>-<code>.apk`, newer = higher
+  `versionCode` than `BuildConfig.VERSION_CODE`. Checked only from Home (start + each foreground),
+  throttled to 3 h only while nothing is new. Round ⬆ left of «Поиск» (full label only when
+  focused — a long label covered the hero's episode info). OK → "unknown apps" grant if missing →
+  download to `cacheDir/update/` → `PackageInstaller` session (`InstallResultReceiver` starts the
+  confirm dialog) → `UpdatedReceiver` relaunches on `MY_PACKAGE_REPLACED`. Feed URL =
+  `BuildConfig.UPDATE_URL`, overridable with `-PupdateUrl=…` for a local test.
 - **Focus is the UI.** Every screen requests initial focus on its primary action; lazy rows compose
   late, so focus requests retry briefly.
 
@@ -131,6 +139,8 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - Build: `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./gradlew :app:assembleRelease`. The **release**
   build (R8, signed with the debug key, ~5 MB) is what runs on the TV; debug Compose is far slower.
   Debug and release share the key, so they install over each other and keep the login.
+- Release to the TV (self-update): `scripts/release.sh` — **outward-facing (public GitHub release); ask
+  the owner first.** `--dry-run` builds and checks the signature without publishing.
 - Deploy: `scripts/tv.sh deploy` (mDNS rediscovers the wireless-debugging port). Check
   `adb -s <tv> shell dumpsys audio | grep -c state:started` is 0 first — an install kills playback.
 - Logs: `adb -s <tv> logcat -s denopub` (`continue:` lines explain the Continue rows;
@@ -222,6 +232,18 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - Splash: the Android TV image doesn't draw the system splash icon, so the branded splash is
   Compose (`ui/SplashOverlay.kt`) until `AppContainer.uiReady`, max 5 s. Brand sources in
   `docs/brand/`, prompts in `docs/brand-prompts.md`.
+
+- **Self-update signing**: the TV only accepts APKs signed with `~/.android/debug.keystore` of the
+  owner's Mac (SHA-256 pinned in `scripts/release.sh`). Never release from another machine or
+  regenerate that keystore; uninstalling to recover loses the kino.pub login. Don't commit it
+  (the repo is public).
+- **Testing self-update on the emulator**: test with *debug* builds only (old: code N with
+  `-PupdateUrl=http://10.0.2.2:8765/latest.json`; new: code N+1, served with `python3 -m
+  http.server`; debug builds allow cleartext via `app/src/debug/AndroidManifest.xml`). Leaving a
+  non-debuggable release with a higher `versionCode` on the emulator blocks every later dev install
+  (`VERSION_DOWNGRADE`, `-d` only works over a debuggable install) — reinstall the normal debug
+  build with `adb install -r -d` afterwards. The updater stamps `shared_prefs/updater.xml`; on a
+  debug build `run-as dev.dt.kinopub rm shared_prefs/updater.xml` forces a fresh check.
 
 ## What NOT to touch
 

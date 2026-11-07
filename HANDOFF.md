@@ -62,6 +62,14 @@ Verified on the real Chromecast by the owner:
    Live muted preview in the focused card: verified on the TV 2026-10-19 (Eurosport 1 and the
    interlaced Eurosport 2 both play; focus change switches the channel, the old card returns to
    its still frame; no audio stream).
+1c. **Self-update (2026-11-07, new)**: ⬆ button on Home when GitHub Releases on `deetan/denopub` has a
+   higher `versionCode`; `scripts/release.sh` publishes. Tested on the emulator with debug builds and a
+   local feed (see CLAUDE.md gotchas). **No release published yet and not on the TV yet**: the TV's
+   current build has no updater, so the first updater build must still go on with `scripts/tv.sh
+   deploy`; after that, releases arrive by themselves. First self-update asks once for «неизвестные
+   приложения» + an install confirmation; later ones should install silently (Android 12+, installer of
+   record) — unverified on the Chromecast. Unverified too: the R8 build parsing the GitHub JSON (the
+   test used debug builds), and whether Google TV allows the relaunch after the update.
 2. **Player controls reworked 2026-10-18** (owner disliked scrubbing and the pause overlay):
    quick jump with a "+N с" label, progressive steps, fading pause sign, no pause sign while frame
    stepping. 2026-10-24 owner feedback applied: OK leaves fine mode; quick jump shows a bare

@@ -15,6 +15,10 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "0.2.0"
+        // Self-update source (system/Updater.kt). Override for a local test: -PupdateUrl=http://10.0.2.2:8765/latest.json
+        val updateUrl = (project.findProperty("updateUrl") as String?)
+            ?: "https://api.github.com/repos/deetan/denopub/releases/latest"
+        buildConfigField("String", "UPDATE_URL", "\"$updateUrl\"")
     }
 
     buildTypes {

@@ -170,7 +170,9 @@ app/src/main/java/dev/dt/kinopub/
   ui/details/              title page: plots, trailers, seasons, episodes
   ui/player/               PlayerController (ExoPlayer, voiceovers, preview player), PlayerScreen
                            (fine bar / seek bar / tracks panel), TrailerScreen
-  system/                  WatchNext (Google TV row, filtered), WakeService (inert, declined)
+  system/                  WatchNext (Google TV row, filtered), WakeService (inert, declined),
+                           Updater (self-update from GitHub Releases + PackageInstaller)
+  ui/home/UpdateButton.kt  the ⬆ «Обновление» button on Home
   ui/theme/Theme.kt        design tokens (object K)
 docs/kinopub-api.md        kino.pub API reference (verified vs UNVERIFIED notes)
 docs/design-prompt.md      UI spec / prompt for visual design
@@ -179,12 +181,39 @@ REPLICATE.md               how an agent forks + rebrands this app for another pe
 docs/lenapub-kit/          self-contained prompt + assets + reference screenshots for a fresh Claude
                            to rebuild this app as "lenapub" for another TV (start: START-HERE.md)
 scripts/tv.sh              Wi-Fi deploy helper
+scripts/release.sh         version bump + build + GitHub release for the TV's self-update
 ```
 
 ## Deploy
 
 There is no store release. The R8 release APK (signed with the debug key) is the build that runs
-on the TV, installed with `scripts/tv.sh deploy`.
+on the TV. Two ways to get a new version there:
+
+- **Self-update (normal way).** On the Mac, from a clean `main`:
+
+  ```bash
+  scripts/release.sh            # patch bump; or minor / major / 1.2.3, --notes "…", --dry-run
+  ```
+
+  It bumps `versionCode`/`versionName`, builds the release APK, checks it is signed with the TV's
+  key, commits + tags `vX.Y.Z`, pushes and creates a GitHub release on `deetan/denopub` with the
+  asset `denopub-X.Y.Z-<code>.apk`. The TV reads
+  `api.github.com/repos/deetan/denopub/releases/latest` (public, no token) when Home starts or
+  comes back to the foreground — at most every 3 h while nothing is new, every time while an update
+  is waiting. A newer `versionCode` adds a round **⬆** button left of «Поиск»; focused it reads
+  «Обновить до X.Y.Z», OK downloads the APK (percentage on the button) and installs it with
+  `PackageInstaller`. Only Home checks or installs — never during playback.
+  First time only: Android asks to allow «Установка неизвестных приложений» for denopub (the
+  button opens that screen; allow it, come back, press OK again), and the system installer asks to
+  confirm. After the first self-update denopub is the installer of record, so later updates install
+  without a dialog (Android 12+ `USER_ACTION_NOT_REQUIRED`); the app relaunches itself
+  (`MY_PACKAGE_REPLACED`).
+- **adb over Wi-Fi** (development): `scripts/tv.sh deploy`, as above.
+
+The signing key is `~/.android/debug.keystore` on the owner's Mac (cert SHA-256 `ef48301c…`, pinned
+in `scripts/release.sh`). An APK signed with any other key is refused by the TV, and uninstalling
+to get around that loses the kino.pub login — keep a private backup of that keystore and never
+release from another machine.
 
 ## License
 
