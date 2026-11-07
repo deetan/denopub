@@ -196,9 +196,11 @@ class KinopubApi(
     }
 
     companion object {
-        const val API_URL = "https://api.service-kp.com/v1/"
-        const val OAUTH_URL = "https://api.service-kp.com/oauth2/device"
-        const val TOKEN_URL = "https://api.service-kp.com/oauth2/token"
+        // kino.pub moved to kino.watch (2026-11): api.service-kp.com stopped answering, while
+        // kino.watch serves the same API under /api (same errors, same tokens).
+        const val API_URL = "https://kino.watch/api/v1/"
+        const val OAUTH_URL = "https://kino.watch/api/oauth2/device"
+        const val TOKEN_URL = "https://kino.watch/api/oauth2/token"
 
         // Public client credentials of the open-source Kodi plugin; kinopub lists the device
         // under this client. See docs/kinopub-api.md.

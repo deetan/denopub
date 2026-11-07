@@ -262,6 +262,9 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   (`VERSION_DOWNGRADE`, `-d` only works over a debuggable install) — reinstall the normal debug
   build with `adb install -r -d` afterwards. The updater stamps `shared_prefs/updater.xml`; on a
   debug build `run-as dev.dt.kinopub rm shared_prefs/updater.xml` forces a fresh check.
+- **kino.pub moved to kino.watch** (2026-11-07): `api.service-kp.com` stopped answering (connect
+  timeouts from TV and Mac; Home showed only its cache, recommendations built empty). The API now
+  lives at `https://kino.watch/api/v1/`, OAuth at `https://kino.watch/api/oauth2/…` (`KinopubApi`).
 - **Emulator kino.pub login can die** (2026-11-07: every call "Not authorized", Home showed only
   `home.json`). Recommendations then build empty and are not cached; re-login needs the owner to
   confirm a device code. Two sessions sharing the AVD also overwrite each other's installs — agree

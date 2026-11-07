@@ -6,7 +6,7 @@ Official docs have invalid JSON examples and typos; shapes below are normalized.
 
 ## 1. Hosts, auth header, conventions
 
-- Official base: `https://api.service-kp.com` (API at `/v1/...`, OAuth at `/oauth2/...`).
+- Official base (since 2026-11, kino.pub → kino.watch): `https://kino.watch/api` (API at `/api/v1/...`, OAuth at `/api/oauth2/...`). Verified 2026-11-07: `kino.watch/api/v1/types` → 401 without token, `kino.watch/api/oauth2/device` → kino.pub-style `incorrect_client_credentials`. The old `https://api.service-kp.com` (API at `/v1/...`) stopped answering (connect timeouts) the same day.
 - Mirrors used by clients: `https://api.srvkp.com` [kodi], and [filmax] `https://smarttvcdn.online` (primary), `https://api.boramoraboom.ru`, `https://api.srvkp.com`. **On mirrors filmax prefixes paths with `api/`** (`{host}/api/v1/...`, `{host}/api/oauth2/device`) UNVERIFIED whether official host accepts that prefix. Health probe: `GET /api/v1/countries` (401 without token = host alive).
 - Auth: `Authorization: Bearer <access_token>` on every `/v1` call.
 - Mutations are mostly POST with form-urlencoded body; many watching endpoints are GET even when they mutate.

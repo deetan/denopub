@@ -63,7 +63,7 @@ use for visual polish.
 ```
  Chromecast (Android TV 12+)                                 kino.pub
 ┌──────────────────────────────────────────────┐        ┌───────────────────────┐
-│ MainActivity → KinoNavHost (Compose for TV)  │        │ api.service-kp.com    │
+│ MainActivity → KinoNavHost (Compose for TV)  │        │ kino.watch/api        │
 │   auth ─ home ─ details ─ player             │  HTTPS │  /oauth2/device       │
 │      │      │       │        │               │◄──────►│  /v1/watching, history│
 │      └── Repository ┴────────┘               │        │  /v1/items, bookmarks │
