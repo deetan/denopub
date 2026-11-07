@@ -89,6 +89,8 @@ fun HomeScreen(
     remember { vm.refresh() } // once per visit, before the first read of state
     val state by vm.state.collectAsState()
     val sport by c.sport.state.collectAsState()
+    val recs by c.recs.state.collectAsState()
+    val recRows = remember(recs.rows, recs.shuffle) { recs.shown() }
     // Channels, guide and still frames refresh only while Home is on screen (never during playback).
     // Only while the app is actually visible: Home stays composed when the app is in the
     // background (TV off), and the loop used to keep fetching frames there.
@@ -100,6 +102,7 @@ fun HomeScreen(
         lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
             if (!first) vm.refresh()
             first = false
+            c.recs.ensure() // no-op unless the rows are missing or older than 12 h
         }
     }
     LaunchedEffect(Unit) { lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) { c.sport.run() } }
@@ -334,6 +337,32 @@ fun HomeScreen(
         }
 
         val onMenu: (Item) -> Unit = { itemMenu(it.id, splitTitle(it.title).first, inWishlist = false) }
+        // Personal recommendations: pools rebuilt every 12 h, a weighted shuffle shown (new each
+        // day and on ↻). The reason ("Christopher Nolan", "как «Жизнь Пи»") is the card's caption.
+        recRows.forEachIndexed { i, (row, picks) ->
+            item("rec:${row.key}") {
+                Section(
+                    row.title,
+                    action = if (i == 0) { { RefreshButton(recs.building) { c.recs.reshuffle() } } } else null,
+                ) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = K.screenPadH),
+                        horizontalArrangement = Arrangement.spacedBy(K.cardGap),
+                    ) {
+                        items(picks, key = { it.item.id }) { r ->
+                            PosterCard(
+                                title = splitTitle(r.item.title).first,
+                                image = r.item.posters?.medium,
+                                subtitle = r.reason,
+                                onClick = { onOpen(r.item.id) },
+                                onLongClick = { onMenu(r.item) },
+                                modifier = Modifier.track("r:${row.key}:${r.item.id}"),
+                            )
+                        }
+                    }
+                }
+            }
+        }
         posterRow("Новые фильмы", data.freshMovies, onOpen, onMenu, track)
         posterRow("Новые сериалы", data.freshSerials, onOpen, onMenu, track)
         posterRow("Популярное", data.hot, onOpen, onMenu, track)

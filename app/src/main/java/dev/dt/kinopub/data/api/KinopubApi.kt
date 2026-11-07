@@ -85,6 +85,8 @@ class KinopubApi(
     }.getOrNull()
 
     suspend fun search(q: String): ItemsResponse = get("items/search", "q" to q, "perpage" to 30)
+    /** kino.pub's own "similar titles" for an item. */
+    suspend fun similar(id: Long): List<Item> = get<ItemsResponse>("items/similar", "id" to id).items
 
     // ---------- Watching ----------
 

@@ -51,6 +51,7 @@ class AppContainer(app: Application) {
     val rater = dev.dt.kinopub.data.api.ImdbRater(http, prefs)
     val skips = dev.dt.kinopub.data.api.SkipSegments(http)
     val sport = dev.dt.kinopub.data.Sport(api, http, app.filesDir)
+    val recs = dev.dt.kinopub.data.Recommender(api, dev.dt.kinopub.data.api.MoviesRecs(http), app.filesDir, appScope)
 
     /** A "resume this" request from a deep link (Google TV Continue watching row). */
     val pendingPlay = kotlinx.coroutines.flow.MutableStateFlow<dev.dt.kinopub.data.ResumeTarget?>(null)

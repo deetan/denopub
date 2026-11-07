@@ -53,6 +53,19 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Wishlist** = bookmark folder `Wishlist` (also matches "Хочу посмотреть"), auto-created.
   "New" = not yet focused for 1.5 s on the TV. Removal repeats until `get-item-folders` confirms
   (kino.pub can store duplicates).
+- **Recommendations** (`data/Recommender.kt`, `data/api/MoviesRecs.kt`, `AppContainer.recs`): five
+  Home rows after the wishlist — «Новинки для вас · Y-3–Y», «Похоже на недавнее», «Смотреть с
+  ребёнком», «Вечер вдвоём», «Пересмотреть любимое». Source = the owner's movies service
+  `GET /movies/api/recommendations` (scored from his IMDb ratings, with reasons; keyless, `x-imdb-user`),
+  bucketed by IMDb genres/year (kids: Family/Animation/Adventure+Fantasy, never Horror/Thriller/Crime/War;
+  couple: Romance/Comedy/Drama/Mystery, no Animation/Family/Horror/Documentary); "similar" = kino.pub
+  `items/similar` of the last 4 history titles; rewatch = his 9–10★ "like" seeds. IMDb → kino.pub by
+  `items/search` on the English title + matching `imdb` id, cached forever (misses retried after 7 days).
+  Titles watched/started on kino.pub (`/watching` any status 1 or time > 0, plus history) are dropped.
+  Pools (≤ 40) rebuilt ≤ every 12 h in `appScope`, cached in `filesDir/recs.json`; the screen shows a
+  weighted shuffle of 14 per row (new daily, ↻ on the first row reshuffles, rebuilding if > 3 h old),
+  a title in one row only. The card caption is the reason (person / «как X» / «ваша ★N»). A service
+  snapshot older than 7 days triggers `POST /api/recommendations/compute`. `recs:` log lines explain it.
 - **Every user action writes to kino.pub**: watched = `watching/toggle?status=1|0` (episode,
   season, all seasons); "Начал смотреть" = `togglewatchlist` (serials) / `marktime` + local stamp
   (movies — kino.pub ignores a 1-second marktime, so the local stamp is what makes it show);
@@ -222,6 +235,11 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - Splash: the Android TV image doesn't draw the system splash icon, so the branded splash is
   Compose (`ui/SplashOverlay.kt`) until `AppContainer.uiReady`, max 5 s. Brand sources in
   `docs/brand/`, prompts in `docs/brand-prompts.md`.
+
+- **Emulator kino.pub login can die** (2026-11-07: every call "Not authorized", Home showed only
+  `home.json`). Recommendations then build empty and are not cached; re-login needs the owner to
+  confirm a device code. Two sessions sharing the AVD also overwrite each other's installs — agree
+  who holds it first.
 
 ## What NOT to touch
 
