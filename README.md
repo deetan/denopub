@@ -208,10 +208,11 @@ on the TV. Two ways to get a new version there:
   «Обновить до X.Y.Z», OK downloads the APK (percentage on the button) and installs it with
   `PackageInstaller`. Only Home checks or installs — never during playback.
   First time only: Android asks to allow «Установка неизвестных приложений» for denopub (the
-  button opens that screen; allow it, come back, press OK again), and the system installer asks to
-  confirm. After the first self-update denopub is the installer of record, so later updates install
-  without a dialog (Android 12+ `USER_ACTION_NOT_REQUIRED`). After an update the TV is back on the
-  Google TV home screen — open denopub again (Android blocks a self-relaunch from the background).
+  button opens that screen with denopub in it: switch it on, press Back, press OK again). There is
+  no confirmation dialog — the app declares `UPDATE_PACKAGES_WITHOUT_USER_ACTION` and updates
+  itself silently (Android 12+, verified on the emulator). The app closes during the install and
+  the TV lands on the Google TV home screen — open denopub again (Android blocks a self-relaunch
+  from the background).
 - **adb over Wi-Fi** (development): `scripts/tv.sh deploy`, as above.
 
 The signing key is `~/.android/debug.keystore` on the owner's Mac (cert SHA-256 `ef48301c…`, pinned

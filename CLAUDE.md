@@ -142,8 +142,10 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   `versionCode` than `BuildConfig.VERSION_CODE`. Checked only from Home (start + each foreground),
   throttled to 3 h only while nothing is new. Round ↑ left of «Поиск» (full label only when
   focused — a long label covered the hero's episode info). OK → "unknown apps" grant if missing →
-  download to `cacheDir/update/` → `PackageInstaller` session (`InstallResultReceiver` starts the
-  confirm dialog) → `UpdatedReceiver` only logs `update: now …` on `MY_PACKAGE_REPLACED` (a
+  download to `cacheDir/update/denopub-<code>.apk` → `PackageInstaller` session with
+  `USER_ACTION_NOT_REQUIRED` + the `UPDATE_PACKAGES_WITHOUT_USER_ACTION` permission = no dialog
+  (without that permission the dialog shows every time; `InstallResultReceiver` still starts it
+  if the system asks) → `UpdatedReceiver` only logs `update: now …` on `MY_PACKAGE_REPLACED` (a
   relaunch from there is blocked as a background activity start — tested; the TV lands on the
   launcher). Feed URL =
   `BuildConfig.UPDATE_URL`, overridable with `-PupdateUrl=…` for a local test.
@@ -264,6 +266,11 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   `home.json`). Recommendations then build empty and are not cached; re-login needs the owner to
   confirm a device code. Two sessions sharing the AVD also overwrite each other's installs — agree
   who holds it first.
+
+- **Self-update cache is keyed by versionCode**: two debug builds came out byte-for-byte the same
+  size, and a size-only "already downloaded" check reinstalled the previous APK. Seen once on the
+  emulator: the «неизвестные приложения» grant was back to "not allowed" after the first
+  self-update (later updates kept it); the button handles it by reopening that screen.
 
 ## What NOT to touch
 

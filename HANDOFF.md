@@ -67,9 +67,9 @@ Verified on the real Chromecast by the owner:
    local feed (see CLAUDE.md gotchas). **No release published yet and not on the TV yet**: the TV's
    current build has no updater, so the first updater build must still go on with `scripts/tv.sh
    deploy`; after that, releases arrive by themselves. First self-update asks once for «неизвестные
-   приложения» + an install confirmation; later ones should install silently (Android 12+, installer of
-   record) — verified on the emulator, not yet on the Chromecast. Unverified: the R8 build parsing
-   the GitHub JSON (the test used debug builds). After an update the app does not reopen by itself.
+   приложения»; no confirm dialog (verified on the emulator: v5→v6 installed in ~3 s). Not yet on the
+   Chromecast. Unverified: the R8 build parsing the GitHub JSON (the test used debug builds). After
+   an update the app does not reopen by itself.
 2. **Player controls reworked 2026-10-18** (owner disliked scrubbing and the pause overlay):
    quick jump with a "+N с" label, progressive steps, fading pause sign, no pause sign while frame
    stepping. 2026-10-24 owner feedback applied: OK leaves fine mode; quick jump shows a bare
