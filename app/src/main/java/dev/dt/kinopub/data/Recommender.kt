@@ -44,12 +44,15 @@ private data class RecsCache(
     val map: Map<String, Mapped> = emptyMap(),       // tconst → kino.pub item (null = not on kino.pub)
     val touched: Set<Long> = emptySet(),             // kino.pub ids already watched/started — never recommended
     val checked: Map<Long, Long> = emptyMap(),       // kino.pub id → when /watching said "untouched"
+    val dismissed: Set<Long> = emptySet(),           // kino.pub ids removed with «Убрать из рекомендаций»
 )
 
 data class RecsState(
     val rows: List<RecRow> = emptyList(),
     val shuffle: Int = 0,
     val building: Boolean = false,
+    /** Removed by the user. Cards already on screen stay (badged) until the next shuffle/rebuild. */
+    val dismissed: Set<Long> = emptySet(),
 ) {
     /**
      * Rows as shown: a weighted shuffle of each pool (better matches more likely), new every day
@@ -62,7 +65,7 @@ data class RecsState(
             val rnd = Random(day * 1_000_003 + shuffle * 7_919L + row.key.hashCode())
             val max = row.pool.maxOfOrNull { it.score }?.takeIf { it > 0 } ?: 1.0
             // Efraimidis–Spirakis: key = u^(1/w). √ flattens the scores so the tail gets a chance.
-            val picked = row.pool.filter { it.item.id !in used }
+            val picked = row.pool.filter { it.item.id !in used && it.item.id !in dismissed }
                 .map { it to Math.pow(rnd.nextDouble(), 1.0 / Math.sqrt((it.score / max).coerceAtLeast(0.01))) }
                 .sortedByDescending { it.second }
                 .take(perRow).map { it.first }
@@ -94,7 +97,7 @@ class Recommender(
     private val lock = Mutex()
     private var cache: RecsCache = runCatching { json.decodeFromString(RecsCache.serializer(), file.readText()) }.getOrDefault(RecsCache())
 
-    private val _state = MutableStateFlow(RecsState(rows = cache.rows))
+    private val _state = MutableStateFlow(RecsState(rows = cache.rows, dismissed = cache.dismissed))
     val state: StateFlow<RecsState> = _state
 
     /** Rebuild in the background if the rows are missing or older than [MAX_AGE_MS]. */
@@ -125,6 +128,24 @@ class Recommender(
                     _state.update { it.copy(building = false, rows = cache.rows) }
                 }
             }
+        }
+    }
+
+    /**
+     * «Убрать из рекомендаций» ([on]) or «Вернуть» (!on): hidden here at once, and sent to the movies
+     * service, which stops recommending it and trusts its reasons less (then recomputes, and the
+     * TV rebuilds when it sees the new snapshot). Titles without an IMDb id are only hidden here.
+     */
+    fun dismiss(item: Item, on: Boolean = true) {
+        val ids = if (on) cache.dismissed + item.id else cache.dismissed - item.id
+        cache = cache.copy(dismissed = ids)
+        _state.update { it.copy(dismissed = ids) }
+        scope.launch {
+            lock.withLock { runCatching { file.writeText(json.encodeToString(RecsCache.serializer(), cache)) } }
+            val imdb = item.imdb ?: return@launch
+            runCatching { recs.dismiss(dev.dt.kinopub.data.api.ImdbRater.tconst(imdb), on) }
+                .onSuccess { Log.i(TAG, "recs: ${if (on) "dismissed" else "restored"} ${item.id} ${item.title.take(30)}") }
+                .onFailure { Log.w(TAG, "recs: dismiss ${item.id} failed: ${it.message}") }
         }
     }
 
@@ -266,7 +287,7 @@ class Recommender(
                 else -> t0
             },
             rows = rows.ifEmpty { cache.rows },
-            map = map, touched = touched, checked = checked,
+            map = map, touched = touched, checked = checked, dismissed = cache.dismissed,
         )
         runCatching { file.writeText(json.encodeToString(RecsCache.serializer(), cache)) }
     }

@@ -72,7 +72,10 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   a title in one row only. The card caption is the reason (person / «как X» / «ваша ★N»). Every Home start
   also asks the service for its `computedAt` (`limit=1`); if it moved since the rows were built
   (the service recomputes 2 min after a rating, after a sync that changed ratings, and nightly), the
-  TV rebuilds. A service snapshot older than 7 days triggers `POST /api/recommendations/compute`. `recs:` log lines explain it.
+  TV rebuilds. A service snapshot older than 7 days triggers `POST /api/recommendations/compute`. Long-press a rec card → «Убрать из рекомендаций» (or «Вернуть»): hidden locally
+  (`RecsCache.dismissed`; the card stays with an «УБРАНО» badge until the next shuffle, so focus never
+  vanishes) and `POST|DELETE /api/recommendations/tt…/dismiss` — the service excludes it, trusts its seed
+  title/people/genres less and recomputes. `recs:` log lines explain it.
 - **Every user action writes to kino.pub**: watched = `watching/toggle?status=1|0` (episode,
   season, all seasons); "Начал смотреть" = `togglewatchlist` (serials) / `marktime` + local stamp
   (movies — kino.pub ignores a 1-second marktime, so the local stamp is what makes it show);

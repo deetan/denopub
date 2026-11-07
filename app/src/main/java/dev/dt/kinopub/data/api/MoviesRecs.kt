@@ -43,6 +43,18 @@ class MoviesRecs(private val http: OkHttpClient) {
     }
 
     /**
+     * "Not for me": the service drops the title and trusts the reasons behind it less (its seed
+     * title, people, genres) from the next recompute on, which it schedules itself. [on] = false undoes.
+     */
+    suspend fun dismiss(tconst: String, on: Boolean = true) = withContext(Dispatchers.IO) {
+        val b = Request.Builder()
+            .url("${ImdbRater.BASE}/api/recommendations/$tconst/dismiss")
+            .header("x-imdb-user", ImdbRater.USER)
+        val req = (if (on) b.post(ByteArray(0).toRequestBody()) else b.delete()).build()
+        http.newCall(req).execute().use { if (!it.isSuccessful) throw ApiException(it.code, "dismiss ${it.code}") }
+    }
+
+    /**
      * Asks the service to recompute (a ~1 min background job there, rate-limited to once per
      * 6 h; a 429 is fine). Called when its snapshot is older than a week, so new IMDb ratings
      * reach the TV.

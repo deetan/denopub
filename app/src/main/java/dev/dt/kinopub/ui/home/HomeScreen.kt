@@ -141,6 +141,18 @@ fun HomeScreen(
         )
     }
 
+    fun recMenu(item: Item) {
+        val removed = item.id in recs.dismissed
+        menu = splitTitle(item.title).first to listOfNotNull(
+            MenuAction("Открыть карточку") { onOpen(item.id) },
+            if (removed) MenuAction("Вернуть в рекомендации") { c.recs.dismiss(item, on = false) }
+            else MenuAction("Убрать из рекомендаций", "не моё — учесть в подборе") { c.recs.dismiss(item) },
+            MenuAction("Добавить в вишлист") { vm.setWishlisted(item.id, true) },
+            MenuAction("Начал смотреть", "добавить в «Продолжить»") { vm.setWatching(item.id) },
+            MenuAction("Отметить просмотренным") { vm.setItemWatched(item.id, true) },
+        )
+    }
+
     fun continueMenu(e: ContinueEntry) {
         menu = splitTitle(e.title).first to listOfNotNull(
             MenuAction("Открыть карточку") { onOpen(e.itemId) },
@@ -354,8 +366,11 @@ fun HomeScreen(
                                 title = splitTitle(r.item.title).first,
                                 image = r.item.posters?.medium,
                                 subtitle = r.reason,
+                                // Stays in place after «Убрать» (a vanishing focused card strands the
+                                // remote); gone on the next shuffle / Home visit.
+                                badge = if (r.item.id in recs.dismissed) "УБРАНО" else null,
                                 onClick = { onOpen(r.item.id) },
-                                onLongClick = { onMenu(r.item) },
+                                onLongClick = { recMenu(r.item) },
                                 modifier = Modifier.track("r:${row.key}:${r.item.id}"),
                             )
                         }
