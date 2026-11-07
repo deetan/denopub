@@ -37,6 +37,7 @@ private data class Mapped(val item: Item? = null, val at: Long = 0)
 
 @Serializable
 private data class RecsCache(
+    val version: Int = 0,                            // rows built by older rules are rebuilt at once
     val builtAt: Long = 0,
     val rows: List<RecRow> = emptyList(),
     val map: Map<String, Mapped> = emptyMap(),       // tconst → kino.pub item (null = not on kino.pub)
@@ -98,7 +99,7 @@ class Recommender(
     /** Rebuild in the background if the rows are missing or older than [MAX_AGE_MS]. */
     fun ensure(force: Boolean = false) {
         if (_state.value.building) return
-        if (!force && cache.rows.isNotEmpty() && System.currentTimeMillis() - cache.builtAt < MAX_AGE_MS) return
+        if (!force && cache.rows.isNotEmpty() && cache.version == VERSION && System.currentTimeMillis() - cache.builtAt < MAX_AGE_MS) return
         scope.launch {
             lock.withLock {
                 _state.update { it.copy(building = true) }
@@ -143,7 +144,6 @@ class Recommender(
         val fresh = (m + s).filter { (it.year ?: 0) >= year - 3 }.sortedByDescending { it.score }.take(POOL)
         val kids = m.filter(::kidsOk).take(POOL)
         val couple = m.filter(::coupleOk)
-            .map { it.copy(score = it.score * if ("Romance" in it.genres || "Comedy" in it.genres) 1.4 else 1.0) }
             .sortedByDescending { it.score }.take(POOL)
         // The titles he rated 9–10 that drive his recommendations: favourites worth seeing again.
         data class Fav(val tconst: String, val title: String, val my: Int, var hits: Int)
@@ -155,13 +155,23 @@ class Recommender(
 
         // ---- IMDb → kino.pub ----
         val map = ConcurrentHashMap(cache.map)
-        val gate = Semaphore(5)
+        val gate = Semaphore(2) // kino.pub answers 429 "Rate limit exceeded" to bursts of searches
+        val failedN = java.util.concurrent.atomic.AtomicInteger()
         suspend fun kp(tconst: String, title: String, y: Int?): Item? {
             map[tconst]?.let { if (it.item != null || t0 - it.at < REMAP_MISS_MS) return it.item }
             val num = tconst.removePrefix("tt").toLongOrNull() ?: return null
-            val found = gate.withPermit {
-                runCatching { api.search(title).items }.onFailure { Log.w(TAG, "recs: search '$title' failed: ${it.message?.take(160)}") }.getOrNull()
-            } ?: return null
+            var found: List<Item>? = null
+            for (attempt in 0..3) {
+                val r = gate.withPermit { runCatching { api.search(title).items } }
+                found = r.getOrNull()
+                val e = r.exceptionOrNull() ?: break
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if ((e as? dev.dt.kinopub.data.api.ApiException)?.code != 429 || attempt == 3) {
+                    Log.w(TAG, "recs: search '$title' failed: ${e.message?.take(160)}"); break
+                }
+                kotlinx.coroutines.delay(4_000L * (attempt + 1)) // docs: wait a few seconds after a 429
+            }
+            if (found == null) { failedN.incrementAndGet(); return null }
             val hit = found.firstOrNull { it.imdb == num && !it.type.equals("3D", true) }
                 ?: found.firstOrNull { it.imdb == null && it.year == y && original(it.title).equals(title, true) }
             map[tconst] = Mapped(hit?.lean(), t0)
@@ -219,9 +229,17 @@ class Recommender(
         rows.forEach { r -> Log.i(TAG, "recs: ${r.key} ${r.pool.size}: " + r.pool.take(8).joinToString { it.item.title.substringBefore(" / ").take(18) }) }
         Log.i(TAG, "recs: built in ${System.currentTimeMillis() - t0} ms; mapped ${map.count { it.value.item != null }}/${map.size}, touched ${touched.size}")
 
-        // An empty build (network down) never replaces good rows.
+        // An empty build (network down) never replaces good rows; lookups that failed (rate limit)
+        // are retried by an earlier rebuild, in an hour instead of 12.
+        val failed = failedN.get()
+        if (failed > 0) Log.w(TAG, "recs: $failed lookups failed, rebuilding in 1 h")
         cache = RecsCache(
-            builtAt = if (rows.isEmpty()) cache.builtAt else t0,
+            version = VERSION,
+            builtAt = when {
+                rows.isEmpty() -> cache.builtAt
+                failed > 0 -> t0 - MAX_AGE_MS + 3_600_000
+                else -> t0
+            },
             rows = rows.ifEmpty { cache.rows },
             map = map, touched = touched, checked = checked,
         )
@@ -231,6 +249,8 @@ class Recommender(
     private companion object {
         const val TAG = "denopub"
         const val POOL = 40
+        /** Bump when the row rules change, so the TV rebuilds instead of waiting up to 12 h. */
+        const val VERSION = 2
         const val SIMILAR_SEEDS = 4
         const val MAX_AGE_MS = 12L * 3600_000
         const val RESHUFFLE_REBUILD_MS = 3L * 3600_000
@@ -239,12 +259,16 @@ class Recommender(
         const val RECHECK_MS = 3L * 86_400_000
 
         private val KIDS_BAD = setOf("Horror", "Thriller", "Crime", "War")
-        private val COUPLE_GOOD = setOf("Romance", "Comedy", "Drama", "Mystery")
-        private val COUPLE_BAD = setOf("Animation", "Family", "Horror", "Documentary")
+        private val COUPLE_GOOD = setOf("Romance", "Comedy")
+        private val COUPLE_BAD = setOf("Animation", "Family", "Horror", "Documentary", "War")
 
-        /** Family or animation, or a fantasy adventure (Life of Pi), and nothing dark. */
+        /**
+         * Family or animation, or a fantasy adventure without action (Life of Pi), and nothing
+         * dark. "No action" keeps out Spider-Man, Star Wars and Everything Everywhere All at Once.
+         */
         fun kidsOk(r: ImdbRec) = r.genres.none { it in KIDS_BAD } &&
-            ("Family" in r.genres || "Animation" in r.genres || ("Adventure" in r.genres && "Fantasy" in r.genres))
+            ("Family" in r.genres || "Animation" in r.genres ||
+                ("Adventure" in r.genres && "Fantasy" in r.genres && "Action" !in r.genres))
 
         fun coupleOk(r: ImdbRec) = r.genres.any { it in COUPLE_GOOD } && r.genres.none { it in COUPLE_BAD }
 

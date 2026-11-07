@@ -57,10 +57,13 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   Home rows after the wishlist — «Новинки для вас · Y-3–Y», «Похоже на недавнее», «Смотреть с
   ребёнком», «Вечер вдвоём», «Пересмотреть любимое». Source = the owner's movies service
   `GET /movies/api/recommendations` (scored from his IMDb ratings, with reasons; keyless, `x-imdb-user`),
-  bucketed by IMDb genres/year (kids: Family/Animation/Adventure+Fantasy, never Horror/Thriller/Crime/War;
-  couple: Romance/Comedy/Drama/Mystery, no Animation/Family/Horror/Documentary); "similar" = kino.pub
+  bucketed by IMDb genres/year (kids: Family/Animation, or Adventure+Fantasy without Action — Life of Pi
+  yes, Spider-Man no — never Horror/Thriller/Crime/War; couple: Romance or Comedy, no Animation/Family/
+  Horror/Documentary/War); "similar" = kino.pub
   `items/similar` of the last 4 history titles; rewatch = his 9–10★ "like" seeds. IMDb → kino.pub by
-  `items/search` on the English title + matching `imdb` id, cached forever (misses retried after 7 days).
+  `items/search` on the English title + matching `imdb` id, cached forever (misses retried after 7 days). Searches run 2 at a time with 4/8/12 s
+  back-off on kino.pub's 429 "Rate limit exceeded" (5 parallel got 101 × 429 on the first build); a
+  build with failed lookups rebuilds after 1 h instead of 12.
   Titles watched/started on kino.pub (`/watching` any status 1 or time > 0, plus history) are dropped.
   Pools (≤ 40) rebuilt ≤ every 12 h in `appScope`, cached in `filesDir/recs.json`; the screen shows a
   weighted shuffle of 14 per row (new daily, ↻ on the first row reshuffles, rebuilding if > 3 h old),
