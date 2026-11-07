@@ -101,10 +101,18 @@ fun DetailsScreen(
     LaunchedEffect(item?.imdb) { item?.imdb?.let { myRating = c.rater.myRating(dev.dt.kinopub.data.api.ImdbRater.tconst(it)) } }
     LaunchedEffect(id) { kpTrailer = runCatching { c.api.trailerUrl(id) }.getOrNull() }
 
-    /** Run a kino.pub write, show a confirmation, re-read the item so statuses are real. */
-    fun act(done: String, block: suspend () -> Unit) {
+    // Set by a "mark watched" write; once the re-read item is fully watched, offer an IMDb rating.
+    var rateIfDone by remember { mutableStateOf(false) }
+
+    /**
+     * Run a kino.pub write, show a confirmation, re-read the item so statuses are real.
+     * [watched] = this write marks something watched (→ maybe the rating prompt).
+     */
+    fun act(done: String, watched: Boolean = false, block: suspend () -> Unit) {
         scope.launch {
-            message = runCatching { block() }.fold({ done }, { "Не получилось: ${it.message}" })
+            val ok = runCatching { block() }
+            message = ok.fold({ done }, { "Не получилось: ${it.message}" })
+            if (watched && ok.isSuccess) rateIfDone = true
             reloads++
             delay(2_500)
             message = null
@@ -125,6 +133,11 @@ fun DetailsScreen(
         (it.isSerial && it.inWatchlist == true) || (touched && !isFullyWatched(it))
     }
     LaunchedEffect(it.id) { runCatching { playFocus.requestFocus() } }
+    LaunchedEffect(it) {
+        if (!rateIfDone) return@LaunchedEffect
+        rateIfDone = false
+        if (fullyWatched && it.imdb != null && myRating == null) rating = true
+    }
 
     var season by remember(it.id) { mutableStateOf(resume?.season ?: it.seasons.firstOrNull()?.number) }
     val (titleRu, titleOrig) = splitTitle(it.title)
@@ -139,15 +152,15 @@ fun DetailsScreen(
         menu = "S$s·E${e.number} · ${e.title.orEmpty()}" to listOf(
             MenuAction("Смотреть с начала") { onPlay(ResumeTarget(it.id, s, e.number, 0)) },
             if (watched) MenuAction("Снять отметку «просмотрено»") { act("Отметка снята") { c.repository.setEpisodeWatched(it.id, s, e.number, false) } }
-            else MenuAction("Отметить просмотренной") { act("Отмечено") { c.repository.setEpisodeWatched(it.id, s, e.number, true) } },
+            else MenuAction("Отметить просмотренной") { act("Отмечено", watched = true) { c.repository.setEpisodeWatched(it.id, s, e.number, true) } },
             MenuAction("Отметить все до этой включительно", "предыдущие сезоны тоже") {
-                act("Отмечено до S$s·E${e.number}") {
+                act("Отмечено до S$s·E${e.number}", watched = true) {
                     it.seasons.filter { x -> x.number < s }.forEach { x -> c.repository.setSeasonWatched(it.id, x.number, true) }
                     it.seasons.first { x -> x.number == s }.episodes.filter { x -> x.number <= e.number && x.watching?.status != 1 }
                         .forEach { x -> c.repository.setEpisodeWatched(it.id, s, x.number, true) }
                 }
             },
-            MenuAction("Отметить сезон $s просмотренным") { act("Сезон $s отмечен") { c.repository.setSeasonWatched(it.id, s, true) } },
+            MenuAction("Отметить сезон $s просмотренным") { act("Сезон $s отмечен", watched = true) { c.repository.setSeasonWatched(it.id, s, true) } },
         )
     }
 
@@ -234,7 +247,7 @@ fun DetailsScreen(
                     }
                 }) { Text(if (watching) "Смотрю ✓" else "Начал смотреть") }
                 OutlinedButton(onClick = {
-                    act(if (fullyWatched) "Отметка снята" else "Отмечено просмотренным") { c.repository.setItemWatched(it, !fullyWatched) }
+                    act(if (fullyWatched) "Отметка снята" else "Отмечено просмотренным", watched = !fullyWatched) { c.repository.setItemWatched(it, !fullyWatched) }
                 }) { Text(if (fullyWatched) "Просмотрено ✓" else "Отметить просмотренным") }
                 if (imdbId != null) OutlinedButton(onClick = { rating = true }) {
                     Text(myRating?.let { r -> "Моя оценка ★ $r" } ?: "Оценить на IMDb")
@@ -276,7 +289,7 @@ fun DetailsScreen(
                         // Long-press: mark the whole season watched (or unwatched if it already is).
                         val toggleSeason = {
                             val done = left == 0
-                            act(if (done) "Сезон ${s.number}: отметка снята" else "Сезон ${s.number} просмотрен") {
+                            act(if (done) "Сезон ${s.number}: отметка снята" else "Сезон ${s.number} просмотрен", watched = !done) {
                                 c.repository.setSeasonWatched(it.id, s.number, !done)
                             }
                         }
@@ -300,7 +313,7 @@ fun DetailsScreen(
                             onLongClick = {
                                 season?.let { s ->
                                     val watched = e.watching?.status == 1
-                                    act(if (watched) "S$s·E${e.number}: отметка снята" else "S$s·E${e.number} просмотрена") {
+                                    act(if (watched) "S$s·E${e.number}: отметка снята" else "S$s·E${e.number} просмотрена", watched = !watched) {
                                         c.repository.setEpisodeWatched(it.id, s, e.number, !watched)
                                     }
                                 }

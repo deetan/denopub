@@ -74,8 +74,13 @@ class HomeViewModel(
     fun setEpisodeWatched(id: Long, season: Int?, episode: Int) =
         act("Отмечено просмотренным") { repo.setEpisodeWatched(id, season, episode, true) }
 
-    fun setItemWatched(id: Long, watched: Boolean) =
-        act(if (watched) "Отмечено просмотренным" else "Отметка снята") { repo.setItemWatched(repo.item(id), watched) }
+    /** [onDone] gets the item after a successful write (Home then offers an IMDb rating). */
+    fun setItemWatched(id: Long, watched: Boolean, onDone: (dev.dt.kinopub.data.api.Item) -> Unit = {}) =
+        act(if (watched) "Отмечено просмотренным" else "Отметка снята") {
+            val item = repo.item(id)
+            repo.setItemWatched(item, watched)
+            onDone(item)
+        }
 
     fun removeFromContinue(id: Long) = act("Убрано из «Продолжить»") { repo.removeFromContinue(id) }
 

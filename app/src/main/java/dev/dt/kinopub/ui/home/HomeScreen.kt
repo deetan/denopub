@@ -90,7 +90,7 @@ fun HomeScreen(
     val state by vm.state.collectAsState()
     val sport by c.sport.state.collectAsState()
     val recs by c.recs.state.collectAsState()
-    val recRows = remember(recs.rows, recs.shuffle) { recs.shown() }
+    val recRows = remember(recs.rows, recs.rowShuffle) { recs.shown() }
     // Channels, guide and still frames refresh only while Home is on screen (never during playback).
     // Only while the app is actually visible: Home stays composed when the app is in the
     // background (TV off), and the loop used to keep fetching frames there.
@@ -130,6 +130,17 @@ fun HomeScreen(
     val data = state.data
 
     menu?.let { (title, actions) -> ActionMenu(title, actions) { menu = null } }
+    // Marking a whole title watched offers an IMDb rating, if the owner hasn't rated it yet.
+    var ratePrompt by remember { mutableStateOf<dev.dt.kinopub.ui.player.RatePrompt?>(null) }
+    val rateScope = rememberCoroutineScope()
+    ratePrompt?.let { p -> dev.dt.kinopub.ui.common.RateDialog(c, p.imdbId, splitTitle(p.title).first, p.current) { ratePrompt = null } }
+    fun watchedThenRate(id: Long) = vm.setItemWatched(id, true) { item ->
+        val imdb = item.imdb ?: return@setItemWatched
+        rateScope.launch {
+            if (c.rater.myRating(dev.dt.kinopub.data.api.ImdbRater.tconst(imdb)) == null)
+                ratePrompt = dev.dt.kinopub.ui.player.RatePrompt(imdb, item.title, null)
+        }
+    }
 
     fun itemMenu(id: Long, title: String, inWishlist: Boolean) {
         menu = title to listOfNotNull(
@@ -137,7 +148,7 @@ fun HomeScreen(
             if (inWishlist) MenuAction("Убрать из вишлиста") { vm.setWishlisted(id, false) }
             else MenuAction("Добавить в вишлист") { vm.setWishlisted(id, true) },
             MenuAction("Начал смотреть", "добавить в «Продолжить»") { vm.setWatching(id) },
-            MenuAction("Отметить просмотренным") { vm.setItemWatched(id, true) },
+            MenuAction("Отметить просмотренным") { watchedThenRate(id) },
         )
     }
 
@@ -149,7 +160,7 @@ fun HomeScreen(
             else MenuAction("Убрать из рекомендаций", "не моё — учесть в подборе") { c.recs.dismiss(item) },
             MenuAction("Добавить в вишлист") { vm.setWishlisted(item.id, true) },
             MenuAction("Начал смотреть", "добавить в «Продолжить»") { vm.setWatching(item.id) },
-            MenuAction("Отметить просмотренным") { vm.setItemWatched(item.id, true) },
+            MenuAction("Отметить просмотренным") { watchedThenRate(item.id) },
         )
     }
 
@@ -162,7 +173,7 @@ fun HomeScreen(
                 }
             },
             MenuAction(if (e.isSerial) "Отметить весь сериал просмотренным" else "Отметить просмотренным") {
-                vm.setItemWatched(e.itemId, true)
+                watchedThenRate(e.itemId)
             },
             MenuAction("Убрать из «Продолжить»", "очистить историю на kino.pub") { vm.removeFromContinue(e.itemId) },
             MenuAction("Добавить в вишлист") { vm.setWishlisted(e.itemId, true) },
@@ -353,15 +364,25 @@ fun HomeScreen(
         // day and on ↻). The reason ("Christopher Nolan", "как «Жизнь Пи»") is the card's caption.
         recRows.forEachIndexed { i, (row, picks) ->
             item("rec:${row.key}") {
-                Section(
-                    row.title,
-                    action = if (i == 0) { { RefreshButton(recs.building) { c.recs.reshuffle() } } } else null,
-                ) {
+                // The last card of every row is «Другие» (↻): other titles for that row only. After
+                // it the row starts from its first card again, and focus moves there.
+                val rowState = rememberLazyListState()
+                val firstCard = remember { FocusRequester() }
+                var focusFirst by remember { mutableStateOf(false) }
+                LaunchedEffect(picks.firstOrNull()?.item?.id) {
+                    rowState.scrollToItem(0)
+                    if (!focusFirst) return@LaunchedEffect
+                    focusFirst = false
+                    // The first card composes a frame after the scroll; retry briefly.
+                    repeat(20) { if (runCatching { firstCard.requestFocus() }.isSuccess) return@LaunchedEffect; kotlinx.coroutines.delay(50) }
+                }
+                Section(row.title) {
                     LazyRow(
+                        state = rowState,
                         contentPadding = PaddingValues(horizontal = K.screenPadH),
                         horizontalArrangement = Arrangement.spacedBy(K.cardGap),
                     ) {
-                        items(picks, key = { it.item.id }) { r ->
+                        itemsIndexed(picks, key = { _, r -> r.item.id }) { idx, r ->
                             PosterCard(
                                 title = splitTitle(r.item.title).first,
                                 image = r.item.posters?.medium,
@@ -371,8 +392,15 @@ fun HomeScreen(
                                 badge = if (r.item.id in recs.dismissed) "УБРАНО" else null,
                                 onClick = { onOpen(r.item.id) },
                                 onLongClick = { recMenu(r.item) },
-                                modifier = Modifier.track("r:${row.key}:${r.item.id}"),
+                                modifier = Modifier.track("r:${row.key}:${r.item.id}")
+                                    .then(if (idx == 0) Modifier.focusRequester(firstCard) else Modifier),
                             )
+                        }
+                        item(key = "more") {
+                            dev.dt.kinopub.ui.common.MoreCard(busy = recs.building && i == 0) {
+                                focusFirst = true
+                                c.recs.refreshRow(row.key)
+                            }
                         }
                     }
                 }

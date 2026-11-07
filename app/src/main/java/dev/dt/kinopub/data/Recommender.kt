@@ -49,32 +49,53 @@ private data class RecsCache(
 
 data class RecsState(
     val rows: List<RecRow> = emptyList(),
-    val shuffle: Int = 0,
+    /** Per row: how many times its ↻ was pressed (part of the shuffle seed). */
+    val rowShuffle: Map<String, Int> = emptyMap(),
+    /** Per row: titles already shown there since its pool last ran out — ↻ brings others. */
+    val seen: Map<String, Set<Long>> = emptyMap(),
     val building: Boolean = false,
-    /** Removed by the user. Cards already on screen stay (badged) until the next shuffle/rebuild. */
+    /** Removed by the user. Cards already on screen stay (badged) until that row's ↻ / a rebuild. */
     val dismissed: Set<Long> = emptySet(),
 ) {
     /**
      * Rows as shown: a weighted shuffle of each pool (better matches more likely), new every day
-     * and on every ↻. A title appears in one row only, the first that picks it.
+     * and on that row's ↻. A title belongs to the first row whose pool has it, so rows never
+     * repeat each other and refreshing one row leaves the others as they are.
      */
     fun shown(perRow: Int = PER_ROW): List<Pair<RecRow, List<RecItem>>> {
-        val used = HashSet<Long>()
-        val day = System.currentTimeMillis() / 86_400_000L
-        return rows.map { row ->
-            val rnd = Random(day * 1_000_003 + shuffle * 7_919L + row.key.hashCode())
-            val max = row.pool.maxOfOrNull { it.score }?.takeIf { it > 0 } ?: 1.0
-            // Efraimidis–Spirakis: key = u^(1/w). √ flattens the scores so the tail gets a chance.
-            val picked = row.pool.filter { it.item.id !in used && it.item.id !in dismissed }
-                .map { it to Math.pow(rnd.nextDouble(), 1.0 / Math.sqrt((it.score / max).coerceAtLeast(0.01))) }
-                .sortedByDescending { it.second }
-                .take(perRow).map { it.first }
-            used += picked.map { it.item.id }
-            row to picked
-        }.filter { it.second.isNotEmpty() }
+        val owner = HashMap<Long, String>()
+        rows.forEach { r -> r.pool.forEach { owner.putIfAbsent(it.item.id, r.key) } }
+        return rows.map { row -> row to pick(row, owner, perRow) }.filter { it.second.isNotEmpty() }
     }
 
-    companion object { const val PER_ROW = 14 }
+    private fun own(row: RecRow, owner: Map<Long, String>) =
+        row.pool.filter { owner[it.item.id] == row.key && it.item.id !in dismissed }
+
+    private fun pick(row: RecRow, owner: Map<Long, String>, perRow: Int): List<RecItem> {
+        val day = System.currentTimeMillis() / 86_400_000L
+        val rnd = Random(day * 1_000_003 + (rowShuffle[row.key] ?: 0) * 7_919L + row.key.hashCode())
+        val mine = own(row, owner)
+        val seenHere = seen[row.key].orEmpty()
+        val fresh = mine.filter { it.item.id !in seenHere }
+        val from = if (fresh.size >= minOf(perRow, mine.size)) fresh else mine
+        val max = from.maxOfOrNull { it.score }?.takeIf { it > 0 } ?: 1.0
+        // Efraimidis–Spirakis: key = u^(1/w). √ flattens the scores so the tail gets a chance.
+        return from.map { it to Math.pow(rnd.nextDouble(), 1.0 / Math.sqrt((it.score / max).coerceAtLeast(0.01))) }
+            .sortedByDescending { it.second }
+            .take(perRow).map { it.first }
+    }
+
+    /** State after ↻ on [key]: what is on screen there now counts as seen; reset once the pool runs dry. */
+    fun refreshed(key: String, perRow: Int = PER_ROW): RecsState {
+        val row = rows.firstOrNull { it.key == key } ?: return this
+        val owner = HashMap<Long, String>().also { o -> rows.forEach { r -> r.pool.forEach { o.putIfAbsent(it.item.id, r.key) } } }
+        val now = pick(row, owner, perRow).map { it.item.id }.toSet()
+        val mine = own(row, owner).map { it.item.id }.toSet()
+        val seenNext = (seen[key].orEmpty() + now).let { if ((mine - it).size < minOf(perRow, mine.size)) now else it }
+        return copy(rowShuffle = rowShuffle + (key to (rowShuffle[key] ?: 0) + 1), seen = seen + (key to seenNext))
+    }
+
+    companion object { const val PER_ROW = 20 }
 }
 
 /**
@@ -149,9 +170,12 @@ class Recommender(
         }
     }
 
-    /** ↻: a new shuffle at once; also a rebuild when the data is older than a few hours. */
-    fun reshuffle() {
-        _state.update { it.copy(shuffle = it.shuffle + 1) }
+    /**
+     * A row's ↻: other titles from that row's pool at once (not the ones just shown); also a
+     * background rebuild when the data is older than a few hours.
+     */
+    fun refreshRow(key: String) {
+        _state.update { it.refreshed(key) }
         if (System.currentTimeMillis() - cache.builtAt > RESHUFFLE_REBUILD_MS) ensure(force = true)
     }
 
@@ -159,7 +183,7 @@ class Recommender(
         val t0 = System.currentTimeMillis()
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
         val moviesD = async { recs.list("movie") }
-        val seriesD = async { runCatching { recs.list("series", 200) }.getOrNull() }
+        val seriesD = async { runCatching { recs.list("series", 400) }.getOrNull() }
         val historyD = async { runCatching { api.history(1) + api.history(2) }.getOrDefault(emptyList()) }
         val recentD = async { runCatching { recs.recent() }.getOrDefault(emptyList()) }
         val movies = moviesD.await()
@@ -294,9 +318,9 @@ class Recommender(
 
     private companion object {
         const val TAG = "denopub"
-        const val POOL = 40
+        const val POOL = 200
         /** Bump when the row rules change, so the TV rebuilds instead of waiting up to 12 h. */
-        const val VERSION = 4
+        const val VERSION = 6
         const val REWATCH_GAP_MS = 3L * 365 * 86_400_000
         const val SIMILAR_SEEDS = 4
         const val MAX_AGE_MS = 12L * 3600_000

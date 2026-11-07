@@ -4,6 +4,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -208,5 +212,37 @@ fun plural(n: Int, one: String, few: String, many: String): String {
         m10 == 1 -> one
         m10 in 2..4 -> few
         else -> many
+    }
+}
+
+/** Last card of a recommendations row: poster-sized «↻ Другие»; spins while [busy]. */
+@Composable
+fun MoreCard(busy: Boolean, onClick: () -> Unit) {
+    val spin = androidx.compose.animation.core.rememberInfiniteTransition(label = "spin")
+    val angle by spin.animateFloat(
+        0f, 360f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(900, easing = androidx.compose.animation.core.LinearEasing)),
+        label = "angle",
+    )
+    Column(Modifier.width(150.dp)) {
+        Card(
+            onClick = { if (!busy) onClick() },
+            shape = CardDefaults.shape(cardShape),
+            border = focusBorder(),
+            scale = CardDefaults.scale(focusedScale = 1.06f),
+            modifier = Modifier.fillMaxWidth().aspectRatio(2f / 3f),
+        ) {
+            Column(
+                Modifier.fillMaxSize().background(K.surface),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    "↻", style = MaterialTheme.typography.displaySmall, color = K.text,
+                    modifier = Modifier.graphicsLayer { rotationZ = if (busy) angle else 0f },
+                )
+                Text("Другие", style = MaterialTheme.typography.titleMedium, color = K.text, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
     }
 }

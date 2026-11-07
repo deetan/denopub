@@ -18,8 +18,8 @@ is built around three jobs, in order of how often they come up:
 3. **Recommendations.** Five shuffled rows picked for you: new releases of the last three years,
    titles like what you watched recently, films to watch with a child, an evening for two, and
    favourites to rewatch. They come from your IMDb ratings (via the movies service) and kino.pub's
-   "similar" titles, skip anything already watched, and show the reason under each card. ↻
-   reshuffles; the mix changes every day.
+   "similar" titles, skip anything already watched, and show the reason under each card. The
+   last card of each row, «↻ Другие», shows other titles for that row; the mix changes every day.
 4. **What's new.** New movies, new serials, and popular titles on kino.pub.
 
 Long-press any card for actions: mark watched, "Начал смотреть", remove from Continue, wishlist
@@ -28,7 +28,7 @@ written to kino.pub immediately, so the official apps and the website see the sa
 card also shows the English IMDb description (OK on the description opens it in full) and
 IMDb/kino.pub trailers, and a **rate on IMDb** button (1–10, shows your current rating). When a
 movie ends — or you leave it in the last 10 % — the TV asks once for an IMDb rating (skipped if you
-rated it already). Ratings go to your IMDb account through the [movies](https://github.com/deetan/movies)
+rated it already). Marking a whole movie or serial watched asks too. Ratings go to your IMDb account through the [movies](https://github.com/deetan/movies)
 service (den.tanaev.su/movies), which holds the IMDb session; the TV is paired once with a code
 from its *Ratings & sync → Add another device*. While playing, a soft **«Пропустить заставку» /
 «Пропустить пересказ» / «Следующая серия ›»** button appears for a few seconds when a known

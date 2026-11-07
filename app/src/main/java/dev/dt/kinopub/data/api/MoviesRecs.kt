@@ -18,8 +18,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 class MoviesRecs(private val http: OkHttpClient) {
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
-    /** [kind] = "movie" | "series". The service caps [limit] at 400. */
-    suspend fun list(kind: String, limit: Int = 400): ImdbRecs = withContext(Dispatchers.IO) {
+    /** [kind] = "movie" | "series". The service caps [limit] at 1000 (it keeps 1000 movies / 400 series). */
+    suspend fun list(kind: String, limit: Int = 1000): ImdbRecs = withContext(Dispatchers.IO) {
         val req = Request.Builder()
             .url("${ImdbRater.BASE}/api/recommendations?kind=$kind&limit=$limit")
             .header("x-imdb-user", ImdbRater.USER)

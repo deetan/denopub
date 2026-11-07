@@ -67,9 +67,12 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   back-off on kino.pub's 429 "Rate limit exceeded" (5 parallel got 101 × 429 on the first build); a
   build with failed lookups rebuilds after 1 h instead of 12.
   Titles watched/started on kino.pub (`/watching` any status 1 or time > 0, plus history) are dropped.
-  Pools (≤ 40) rebuilt ≤ every 12 h in `appScope`, cached in `filesDir/recs.json`; the screen shows a
-  weighted shuffle of 14 per row (new daily, ↻ on the first row reshuffles, rebuilding if > 3 h old),
-  a title in one row only. The card caption is the reason (person / «как X» / «ваша ★N»). Every Home start
+  Pools (≤ 200; the service keeps 1000 movies + 400 series and the TV reads them all) rebuilt ≤ every 12 h in `appScope`, cached in `filesDir/recs.json`; the screen shows a
+  weighted shuffle of 20 per row (new daily). **Every row ends with a «↻ Другие» card** (`MoreCard`, no ↻ by the title; OK refreshes and focus jumps to the row's first card; `Recommender.refreshRow` →
+  `RecsState.refreshed`): what's on screen there joins that row's `seen` set and the next pick comes
+  from the rest, until the pool runs dry (then `seen` resets); also rebuilds if > 3 h old. A title
+  belongs to the first row whose pool has it (`owner` map), so rows never repeat each other and one
+  row's ↻ leaves the others unchanged. The card caption is the reason (person / «как X» / «ваша ★N»). Every Home start
   also asks the service for its `computedAt` (`limit=1`); if it moved since the rows were built
   (the service recomputes 2 min after a rating, after a sync that changed ratings, and nightly), the
   TV rebuilds. A service snapshot older than 7 days triggers `POST /api/recommendations/compute`. Long-press a rec card → «Убрать из рекомендаций» (or «Вернуть»): hidden locally
@@ -132,6 +135,10 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   device*, 8 chars, 10 min); a `DEVICE` error wipes it and asks again. `PlayerController.offerRating`
   prompts at STATE_ENDED or on Back in the last 10 % of a **movie** (no next part), once per title
   (`imdb_rate_asked`), only if unrated. Title card button «Оценить на IMDb» / «Моя оценка ★ N».
+  **Marking watched also offers it** (owner, 2026-11-07), only if unrated: Home menus («Отметить
+  просмотренным» / «…весь сериал…», `watchedThenRate`) and the title card (any watched write that
+  leaves the whole title watched — `rateIfDone`, checked on the re-read item). Episode marks that
+  don't finish the title don't ask.
 - **Skip intro / credits** (`data/api/SkipSegments.kt`, `PlayerController.loadSegments/skip`,
   button in `PlayerScreen`): per episode, TheIntroDB + IntroDB by IMDb id (`Item.imdb` is the
   series id; movies only when single-part). Merge: both present → must overlap (else dropped);
