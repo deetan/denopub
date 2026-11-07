@@ -75,6 +75,7 @@ fun DetailsScreen(
     onPlay: (ResumeTarget) -> Unit,
     onBack: () -> Unit,
     onTrailer: (url: String, title: String) -> Unit,
+    onOpen: (Long) -> Unit = {},
 ) {
     var item by remember { mutableStateOf<Item?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -100,6 +101,12 @@ fun DetailsScreen(
     var rating by remember { mutableStateOf(false) }
     LaunchedEffect(item?.imdb) { item?.imdb?.let { myRating = c.rater.myRating(dev.dt.kinopub.data.api.ImdbRater.tconst(it)) } }
     LaunchedEffect(id) { kpTrailer = runCatching { c.api.trailerUrl(id) }.getOrNull() }
+    // kino.pub's "similar titles", shown at the bottom (movies) or after the episodes (serials).
+    var similar by remember { mutableStateOf<List<Item>>(emptyList()) }
+    LaunchedEffect(id) {
+        similar = runCatching { c.api.similar(id) }.getOrDefault(emptyList())
+            .filter { s -> s.id != id && !s.type.equals("3D", true) }.distinctBy { s -> s.id }.take(24)
+    }
 
     // Set by a "mark watched" write; once the re-read item is fully watched, offer an IMDb rating.
     var rateIfDone by remember { mutableStateOf(false) }
@@ -166,7 +173,11 @@ fun DetailsScreen(
 
     Box(Modifier.fillMaxSize()) {
         Column(
-            Modifier.fillMaxSize().padding(horizontal = K.screenPadH, vertical = K.screenPadV),
+            Modifier.fillMaxSize()
+                // Movies scroll as a whole, so the similar row below can come into view. Serials
+                // can't (the episode list is lazy); their similar row is the list's last item.
+                .then(if (it.seasons.isEmpty()) Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()) else Modifier)
+                .padding(horizontal = K.screenPadH, vertical = K.screenPadV),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // Header: poster + facts + plot
@@ -320,8 +331,9 @@ fun DetailsScreen(
                             },
                         )
                     }
+                    if (similar.isNotEmpty()) item("similar") { SimilarRow(similar, onOpen, Modifier.padding(top = 16.dp)) }
                 }
-            }
+            } else if (similar.isNotEmpty()) SimilarRow(similar, onOpen)
         }
         message?.let {
             Text(
@@ -330,6 +342,30 @@ fun DetailsScreen(
                     .background(K.surfaceHi, RoundedCornerShape(8.dp))
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             )
+        }
+    }
+}
+
+/** «Похожие»: kino.pub's similar titles as small posters; OK opens that title's card. */
+@Composable
+private fun SimilarRow(items: List<Item>, onOpen: (Long) -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Похожие", style = MaterialTheme.typography.titleMedium, color = K.text)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(K.cardGap),
+            // Room for the focus zoom.
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+        ) {
+            items(items, key = { s -> s.id }) { s ->
+                dev.dt.kinopub.ui.common.PosterCard(
+                    title = splitTitle(s.title).first,
+                    image = s.posters?.medium,
+                    subtitle = listOfNotNull(s.year?.toString(), s.imdbRating?.let { r -> "IMDb %.1f".format(r) }).joinToString(" · "),
+                    onClick = { onOpen(s.id) },
+                    width = 110.dp,
+                    serial = s.isSerial,
+                )
+            }
         }
     }
 }

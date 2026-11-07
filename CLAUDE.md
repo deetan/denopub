@@ -128,6 +128,9 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   teasers via `data/api/ImdbClient.kt`, unofficial GraphQL `caching.graphql.imdb.com` — imdb.com
   HTML is behind an anti-bot wall) played in `TrailerScreen`; season chips and episode rows.
   Long-press: episode → toggle watched; season chip → toggle the whole season.
+  **«Похожие»** (owner, 2026-11-07): kino.pub `items/similar` (≤ 24, no 3D) as 110 dp posters; OK
+  opens that title's card (Back returns). Movies: last block, the page scrolls (`verticalScroll`) to
+  reach it. Serials: the last item of the episode `LazyColumn` (a lazy list can't sit in a scroll).
 - **IMDb rating** (`data/api/ImdbRater.kt`, `ui/common/RateDialog.kt`): the owner's own rating is
   read from public GraphQL (`title.userRating(userId: "ur0218725")`); writes go to his **movies
   service** (`~/Projects/movies`, `github.com/deetan/movies`, `POST den.tanaev.su/movies/api/rate`

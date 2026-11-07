@@ -85,6 +85,7 @@ fun KinoNavHost(c: AppContainer) {
                     onPlay = { nav.navigate(Routes.player(it)) },
                     onBack = { nav.popBackStack() },
                     onTrailer = { url, title -> nav.navigate(Routes.trailer(url, title)) },
+                    onOpen = { nav.navigate(Routes.details(it)) },
                 )
             }
             composable(

@@ -26,7 +26,7 @@ Long-press any card for actions: mark watched, "Начал смотреть", re
 add/remove. In a title card, long-press an episode or season to toggle it watched. Every action is
 written to kino.pub immediately, so the official apps and the website see the same state. The title
 card also shows the English IMDb description (OK on the description opens it in full) and
-IMDb/kino.pub trailers, and a **rate on IMDb** button (1–10, shows your current rating). When a
+IMDb/kino.pub trailers, a «Похожие» row of similar titles at the bottom, and a **rate on IMDb** button (1–10, shows your current rating). When a
 movie ends — or you leave it in the last 10 % — the TV asks once for an IMDb rating (skipped if you
 rated it already). Marking a whole movie or serial watched asks too. Ratings go to your IMDb account through the [movies](https://github.com/deetan/movies)
 service (den.tanaev.su/movies), which holds the IMDb session; the TV is paired once with a code
