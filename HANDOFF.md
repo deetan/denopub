@@ -64,9 +64,9 @@ Verified on the real Chromecast by the owner:
    its still frame; no audio stream).
 1c. **Self-update (2026-11-07, new)**: ↑ button on Home when GitHub Releases on `deetan/denopub` has a
    higher `versionCode`; `scripts/release.sh` publishes. Tested on the emulator with debug builds and a
-   local feed (see CLAUDE.md gotchas). **No release published yet and not on the TV yet**: the TV's
-   current build has no updater, so the first updater build must still go on with `scripts/tv.sh
-   deploy`; after that, releases arrive by themselves. First self-update asks once for «неизвестные
+   local feed (see CLAUDE.md gotchas). **On the TV since 2026-11-07 12:31** (0.2.0, code 2, via
+   `scripts/tv.sh deploy`; log `update: have 2, latest none` — GitHub reached, no release yet). From
+   now on `scripts/release.sh` (ask the owner first) is enough; releases arrive by themselves. First self-update asks once for «неизвестные
    приложения»; no confirm dialog (verified on the emulator: v5→v6 installed in ~3 s). Not yet on the
    Chromecast. Unverified: the R8 build parsing the GitHub JSON (the test used debug builds). After
    an update the app does not reopen by itself.
