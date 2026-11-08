@@ -63,6 +63,7 @@ import dev.dt.kinopub.ui.common.splitTitle
 import dev.dt.kinopub.ui.theme.K
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 /**
  * Title card. One primary action (resume/play) focused; next to it the state toggles that sync
@@ -88,8 +89,23 @@ fun DetailsScreen(
     val playFocus = remember { FocusRequester() }
     val trailerFocus = remember { FocusRequester() }
 
+    // Load (and re-read after every write). If kino.pub is down, keep retrying — 5 s, 10 s … 1 min —
+    // but only while the app is on screen (no fetching with the TV off).
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(id, reloads) {
-        runCatching { item = c.repository.item(id) }.onFailure { error = it.message }
+        var wait = 5_000L
+        while (true) {
+            try {
+                item = c.repository.item(id); error = null; break
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = e.message ?: "kino.pub не отвечает"
+                if (item != null) break // a failed re-read keeps the page as it was
+            }
+            delay(wait); wait = minOf(wait * 2, 60_000L)
+            lifecycle.currentStateFlow.first { st -> st.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) }
+        }
     }
     LaunchedEffect(id) { wishlisted = runCatching { c.repository.isInWishlist(id) }.getOrNull() }
     // Extra info: English plot + trailers from IMDb, and kino.pub's own trailer.
@@ -126,7 +142,8 @@ fun DetailsScreen(
             .filter(::ok).distinctBy { s -> s.id }.take(24)
     }
 
-    // Set by a "mark watched" write; once the re-read item is fully watched, offer an IMDb rating.
+    // Set by a "mark watched" write; once the re-read item is fully watched, offer an IMDb rating
+    // (always — if he rated it before, the dialog shows that rating and Back keeps it).
     var rateIfDone by remember { mutableStateOf(false) }
 
     /**
@@ -146,7 +163,15 @@ fun DetailsScreen(
 
     val it = item ?: run {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(error ?: "Загрузка…", color = if (error != null) K.badge else K.muted)
+            val err = error
+            if (err == null) Text("Загрузка…", color = K.muted)
+            else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(err.take(200), color = K.badge, maxLines = 3)
+                Text("Пробую ещё раз сам…", color = K.muted, style = MaterialTheme.typography.labelMedium)
+                val retry = remember { FocusRequester() }
+                Button(onClick = { error = null; reloads++ }, modifier = Modifier.focusRequester(retry)) { Text("Повторить") }
+                LaunchedEffect(Unit) { repeat(10) { if (runCatching { retry.requestFocus() }.isSuccess) return@LaunchedEffect; delay(50) } }
+            }
         }
         return
     }
@@ -161,7 +186,7 @@ fun DetailsScreen(
     LaunchedEffect(it) {
         if (!rateIfDone) return@LaunchedEffect
         rateIfDone = false
-        if (fullyWatched && it.imdb != null && myRating == null) rating = true
+        if (fullyWatched && it.imdb != null) rating = true // shows his current rating if any
     }
 
     var season by remember(it.id) { mutableStateOf(resume?.season ?: it.seasons.firstOrNull()?.number) }

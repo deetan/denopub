@@ -130,15 +130,15 @@ fun HomeScreen(
     val data = state.data
 
     menu?.let { (title, actions) -> ActionMenu(title, actions) { menu = null } }
-    // Marking a whole title watched offers an IMDb rating, if the owner hasn't rated it yet.
+    // Marking a whole title watched always offers an IMDb rating; if he rated it before, the dialog
+    // shows that rating (Back keeps it).
     var ratePrompt by remember { mutableStateOf<dev.dt.kinopub.ui.player.RatePrompt?>(null) }
     val rateScope = rememberCoroutineScope()
     ratePrompt?.let { p -> dev.dt.kinopub.ui.common.RateDialog(c, p.imdbId, splitTitle(p.title).first, p.current) { ratePrompt = null } }
     fun watchedThenRate(id: Long) = vm.setItemWatched(id, true) { item ->
         val imdb = item.imdb ?: return@setItemWatched
         rateScope.launch {
-            if (c.rater.myRating(dev.dt.kinopub.data.api.ImdbRater.tconst(imdb)) == null)
-                ratePrompt = dev.dt.kinopub.ui.player.RatePrompt(imdb, item.title, null)
+            ratePrompt = dev.dt.kinopub.ui.player.RatePrompt(imdb, item.title, c.rater.myRating(dev.dt.kinopub.data.api.ImdbRater.tconst(imdb)))
         }
     }
 
@@ -152,16 +152,32 @@ fun HomeScreen(
         )
     }
 
-    fun recMenu(item: Item) {
+    /**
+     * [my] = his IMDb rating once read ([known]); the menu opens at once and the rating line fills
+     * in when IMDb answers. Recommendations include films he saw elsewhere and never rated.
+     */
+    fun recMenu(item: Item, my: Int? = null, known: Boolean = false) {
         val removed = item.id in recs.dismissed
-        menu = splitTitle(item.title).first to listOfNotNull(
+        val name = splitTitle(item.title).first
+        menu = name to listOfNotNull(
             MenuAction("Открыть карточку") { onOpen(item.id) },
+            item.imdb?.let { imdb ->
+                MenuAction(
+                    if (my != null) "Моя оценка IMDb ★ $my" else "Оценить на IMDb",
+                    when { !known -> "проверяю оценку…"; my != null -> "изменить"; else -> "уже смотрел — оценить" },
+                ) { ratePrompt = dev.dt.kinopub.ui.player.RatePrompt(imdb, item.title, my) }
+            },
             if (removed) MenuAction("Вернуть в рекомендации") { c.recs.dismiss(item, on = false) }
             else MenuAction("Убрать из рекомендаций", "не моё — учесть в подборе") { c.recs.dismiss(item) },
             MenuAction("Добавить в вишлист") { vm.setWishlisted(item.id, true) },
             MenuAction("Начал смотреть", "добавить в «Продолжить»") { vm.setWatching(item.id) },
             MenuAction("Отметить просмотренным") { watchedThenRate(item.id) },
         )
+        val imdb = item.imdb
+        if (!known && imdb != null) rateScope.launch {
+            val r = c.rater.myRating(dev.dt.kinopub.data.api.ImdbRater.tconst(imdb))
+            if (menu?.first == name) recMenu(item, r, known = true)
+        }
     }
 
     fun continueMenu(e: ContinueEntry) {

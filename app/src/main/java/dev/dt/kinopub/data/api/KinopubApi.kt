@@ -190,6 +190,9 @@ class KinopubApi(
         http.newCall(builder.build()).execute().use { resp ->
             val text = resp.body?.string().orEmpty()
             if (resp.code == 401) throw NotAuthorizedException()
+            // An HTML page instead of JSON = kino.pub's web server is down or mid-maintenance (seen
+            // 2026-11-08: nginx "404 Not Found" on the token refresh). Never show raw HTML.
+            if (text.trimStart().startsWith("<")) throw ApiException(resp.code, "kino.pub не отвечает (HTTP ${resp.code}), попробуйте позже")
             if (!resp.isSuccessful && !allowErrorBody) throw ApiException(resp.code, text.take(300))
             if (T::class == Unit::class) Unit as T else json.decodeFromString<T>(text)
         }
