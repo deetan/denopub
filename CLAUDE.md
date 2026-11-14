@@ -93,10 +93,13 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   group; overrides select the whole group; kino.pub `audios[]` metadata is matched by the "NN."
   prefix of the rendition NAME. Subtitles: sideloaded `SubtitleConfiguration`s, ordered
   remembered → RU → EN → rest. Picks are saved per title and re-applied on every episode.
-- **Progress**: `marktime` every 30 s, on pause and on exit (via `AppContainer.appScope`);
+- **Progress**: `marktime` every 30 s, on pause and on exit (via `AppContainer.appScope`); a deliberate
+  pause writes even at 1 s (other saves skip the first 5 s). All progress writes go out one at a time
+  in order (`PlayerController.write`, a Mutex) so a late marktime can't overtake the watched toggle;
   `toggle?status=1` at the end, then auto-advance (crossing seasons).
 - **Player overlay levels** (rule: ↓ reveals the next level, ↑ hides the current one):
-  NONE → ↑ FINE **mode** (top bar; ← → frame-step with EXACT seeks, pauses). Sticky: only ↓, OK (play/pause — returns to plain watching, no bar) or
+  NONE → ↑ FINE **mode** (pauses at once, no pause sign; top bar; ← → frame-step with EXACT seeks). ↓ / Back
+  resume if it was playing when ↑ was pressed (`fineResume`). Sticky: only ↓, OK (play/pause — returns to plain watching, no bar) or
   Back leave it; the bar hides after 3 s idle (`fineBar`) and returns on the next ← →/↑ ·
   NONE → ↓ OSD (seek bar with white position marker + stats line, **no hint text**; ← → scrub
   shows just the bar + target time — no preview frame, owner's call — commits ~0.9 s after
@@ -107,7 +110,8 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   OK plays, Back returns) — same held-OK guard as `ActionMenu`. Switching episodes
   (`PlayerController.playEpisode`, also media ⏭) saves the left episode's time and does **not**
   mark it watched; the target resumes from this session's `savedSec` or kino.pub's unfinished
-  time. Only playing to the end marks watched. Focus must land in the panel at once: `TracksPanel` retries `requestFocus`
+  time. Only playing to the end marks watched — or leaving it in its credits (`inCredits`: known credits
+  segment, else last 5 % / last minute; owner 2026-11-14: switched from the credits, Continue went back). Focus must land in the panel at once: `TracksPanel` retries `requestFocus`
   until `hasFocus()` (it used to "succeed" while the panel was still expanding and cost an extra
   press). Panel open/close is ONE `expandVertically`/`shrinkVertically` — no outer
   `animateContentSize`, which lagged and made the bar "fall" after the panel vanished.
@@ -209,6 +213,12 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - App name **denopub**; package/applicationId stay `dev.dt.kinopub` (changing it = second app, lost login).
 
 ## Gotchas & known issues
+
+- **kino.pub 429 "Rate limit exceeded" after the TV wakes** (2026-11-14): the foreground reload fired
+  ~60 `/watching` checks + kids `items/{id}` + a stale recommendations rebuild at once, and the owner's
+  next OK failed. Every call now goes through `KinopubApi.throttled`: ≤ 4 at once, calls inside
+  `KinopubApi.Background` (Continue checks, `classifyKids`, `Recommender.build`) share only 2 of them,
+  and a 429 sets a shared cooldown (3/6/12 s) and is retried. Log: `kino.pub 429 on …`.
 
 - **A sleeping Chromecast has no network.** An install/launch while it slept made every Home call
   fail, Home saved that empty result over `home.json`, and after wake-up only the Sport row was

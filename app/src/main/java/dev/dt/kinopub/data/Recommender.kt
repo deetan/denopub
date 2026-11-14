@@ -218,7 +218,7 @@ class Recommender(
         if (System.currentTimeMillis() - cache.builtAt > RESHUFFLE_REBUILD_MS) ensure(force = true)
     }
 
-    private suspend fun build() = coroutineScope {
+    private suspend fun build() = kotlinx.coroutines.withContext(dev.dt.kinopub.data.api.KinopubApi.Background) {
         val t0 = System.currentTimeMillis()
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
         val moviesD = async { recs.list("movie") }

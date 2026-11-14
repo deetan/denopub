@@ -97,8 +97,9 @@ private fun fineStepMs(heldMs: Long) = when {
 
 /**
  * Remote map:
- *   ↑ (from video)   → FINE mode: top bar, ← → step 0.5 s (held: 1 s, 2 s, 5 s), pauses. The mode stays
- *                      until ↓, OK (play/pause) or Back; the bar hides after 3 s idle and returns on the next ← →
+ *   ↑ (from video)   → FINE mode: pauses at once, top bar, ← → step 0.5 s (held: 1 s, 2 s, 5 s). The mode
+ *                      stays until ↓ / Back (resume if it was playing) or OK (play/pause); the bar hides
+ *                      after 3 s idle and returns on the next ← →
  *   Rule everywhere: ↓ reveals the next level, ↑ hides the current one
  *   ↓ once           → OSD: seek bar with position marker; ← → scrub with a preview frame, commits
  *                      ~1 s after release or on OK
@@ -165,6 +166,20 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     fun togglePause() { if (vm.player.playWhenReady) userPause() else vm.player.play() }
     // Play/pause always ends fine mode: you're back to plain watching, no top bar.
     fun leaveFine() { if (overlay == Overlay.FINE) overlay = Overlay.NONE }
+    // ↑ freezes the picture at once (owner, 2026-11-14) — a still frame, so no pause sign.
+    // ↓ / Back out of fine mode resume if it was playing when ↑ was pressed.
+    var fineResume by remember { mutableStateOf(false) }
+    fun enterFine() {
+        fineResume = vm.player.playWhenReady
+        if (fineResume) vm.player.pause()
+        userPaused = false; bigPause = false
+        overlay = Overlay.FINE
+    }
+    fun exitFine() {
+        overlay = Overlay.NONE
+        if (fineResume) vm.player.play()
+        fineResume = false
+    }
 
     // Quick jump (← / → with no overlay): seeks right away, shows only a bare seek bar.
     var jumpSteps by remember { mutableIntStateOf(0) }
@@ -275,7 +290,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
     BackHandler {
         when {
             overlay == Overlay.TRACKS -> overlay = Overlay.OSD
-            overlay == Overlay.FINE -> overlay = Overlay.NONE
+            overlay == Overlay.FINE -> exitFine()
             scrubMs != null -> cancelScrub()
             // Leaving a movie in its credits: ask for the IMDb rating first (once per title).
             vm.offerRating() -> Unit
@@ -323,7 +338,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                             Key.DirectionRight -> { fine(true, repeat); true }
                             // Sticky: only ↓, OK (play/pause) or Back leave; ↑ just brings the bar back.
                             Key.DirectionUp -> { fineBar = true; true }
-                            Key.DirectionDown -> { overlay = Overlay.NONE; true }
+                            Key.DirectionDown -> { exitFine(); true }
                             Key.DirectionCenter, Key.Enter -> { leaveFine(); togglePause(); true }
                             else -> false
                         }
@@ -336,7 +351,7 @@ fun PlayerScreen(c: AppContainer, start: ResumeTarget, onExit: () -> Unit) {
                             else -> false
                         }
                         else -> when (e.key) { // NONE
-                            Key.DirectionUp -> { overlay = Overlay.FINE; true }
+                            Key.DirectionUp -> { enterFine(); true }
                             Key.DirectionDown -> { overlay = Overlay.OSD; true }
                             Key.DirectionLeft -> { quickSeek(false, repeat); true }
                             Key.DirectionRight -> { quickSeek(true, repeat); true }

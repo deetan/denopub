@@ -145,8 +145,9 @@ class Repository(
             candidates.values.joinToString { "${it.id}:${it.title.take(16)}" })
         // All candidates (history + subscriptions + unfinished movies, ~60): capping them cut off
         // subscriptions without recent history — e.g. a kids' serial — before they were checked.
+        // Background lane: ~60 calls at once on every wake-up drew kino.pub's 429 (see KinopubApi.throttled).
         candidates.values.take(limit).map { item ->
-            async {
+            async(dev.dt.kinopub.data.api.KinopubApi.Background) {
                 runCatching {
                     val info = api.watching(item.id)
                     // kino.pub's own "last changed" per episode: a recency signal that history misses.
@@ -179,7 +180,7 @@ class Repository(
 
     /** Fetches genres for [ids] and stores the verdict; returns ids that turned out to be kids'. */
     suspend fun classifyKids(ids: List<Long>): Set<Long> = coroutineScope {
-        val flags = ids.map { id -> async { id to runCatching { isKidsContent(api.item(id)) }.getOrNull() } }
+        val flags = ids.map { id -> async(dev.dt.kinopub.data.api.KinopubApi.Background) { id to runCatching { isKidsContent(api.item(id)) }.getOrNull() } }
             .awaitAll().mapNotNull { (id, k) -> k?.let { id to it } }.toMap()
         prefs.saveKidsFlags(flags)
         flags.filterValues { it }.keys

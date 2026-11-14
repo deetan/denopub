@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 
 /** One selectable option in the tracks panel. */
 data class TrackOption(
@@ -104,6 +105,7 @@ class PlayerController(
     private var progressJob: Job? = null
     // Positions saved during this session (kino.pub's copy in [item] is from when playback started).
     private val savedSec = mutableMapOf<Pair<Int?, Int>, Int>()
+    private val writes = kotlinx.coroutines.sync.Mutex()
 
     // Skippable intro / recap / credits of the current episode (empty until known, or unknown).
     private val _segments = MutableStateFlow<List<Segment>>(emptyList())
@@ -131,7 +133,8 @@ class PlayerController(
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!isPlaying) saveProgress()
+                // playWhenReady false = really paused (not just buffering after a seek).
+                if (!isPlaying) saveProgress(paused = !player.playWhenReady)
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -317,7 +320,13 @@ class PlayerController(
         val it = item ?: return
         if (season == current.season && episode == current.episode) return
         val v = c.repository.video(it, season, episode) ?: return
-        saveProgress()
+        // Leaving in the credits counts as finished (owner, 2026-11-14: watched to the credits,
+        // picked the next episode, and Continue later went back to the one he had finished).
+        if (inCredits()) {
+            val done = current
+            savedSec[done.season to done.episode] = 0
+            write { c.repository.markWatched(it.id, done.season, done.episode) }
+        } else saveProgress()
         load(ResumeTarget(it.id, season, episode, 0), resumeSec(season, v) * 1000L)
     }
 
@@ -332,7 +341,7 @@ class PlayerController(
         val it = item ?: return
         val done = current
         savedSec[done.season to done.episode] = 0
-        c.appScope.launch { c.repository.markWatched(it.id, done.season, done.episode) }
+        write { c.repository.markWatched(it.id, done.season, done.episode) }
         val next = c.repository.nextOf(it, done.season, done.episode) ?: run { offerRating(); return }
         val v = c.repository.video(it, next.first, next.second) ?: return
         load(ResumeTarget(it.id, next.first, next.second, 0), resumeSec(next.first, v) * 1000L)
@@ -356,18 +365,39 @@ class PlayerController(
         return true
     }
 
-    fun saveProgress() {
+    /**
+     * Writes progress. [paused] = the owner paused on purpose: then even the first seconds of an
+     * episode are written (pausing right after the next episode started used to save nothing).
+     */
+    fun saveProgress(paused: Boolean = false) {
         val it = item ?: return
         val sec = (player.currentPosition / 1000).toInt()
         // At the end onEnded marks it watched; a time write here would race it.
-        if (sec < 5 || player.playbackState == Player.STATE_ENDED) return
+        if (sec < (if (paused) 1 else 5) || player.playbackState == Player.STATE_ENDED) return
         val t = current
         savedSec[t.season to t.episode] = sec
-        // appScope, not viewModelScope: this also runs from onCleared, when viewModelScope is dead.
-        c.appScope.launch {
+        write {
             c.repository.markTime(it.id, t.season, t.episode, sec)
             c.prefs.markPlayed(it.id) // keeps "last watched" right even when kino.pub history lags
         }
+    }
+
+    /** Inside the episode's known credits, or (unknown credits) in its last 5 % / last minute. */
+    private fun inCredits(): Boolean {
+        val dur = player.duration.takeIf { it > 0 } ?: return false
+        val pos = player.currentPosition
+        val credits = _segments.value.firstOrNull { it.kind == SegmentKind.CREDITS }
+        if (credits != null && pos >= credits.startMs) return true
+        return pos >= dur * 0.95 || dur - pos <= 60_000
+    }
+
+    /**
+     * Progress writes go out one at a time, in order: a periodic marktime landing after the
+     * end-of-episode watched toggle could otherwise undo it. appScope, not viewModelScope: this
+     * also runs from onCleared, when viewModelScope is dead.
+     */
+    private fun write(block: suspend () -> Unit) {
+        c.appScope.launch { writes.withLock { block() } }
     }
 
     // ---------- tracks ----------

@@ -6,6 +6,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -187,18 +189,63 @@ class KinopubApi(
             if (!refresh()) throw NotAuthorizedException()
             builder.header("Authorization", "Bearer ${tokens.current()!!.access}")
         }
-        http.newCall(builder.build()).execute().use { resp ->
-            val text = resp.body?.string().orEmpty()
-            if (resp.code == 401) throw NotAuthorizedException()
+        val request = builder.build()
+        val (code, text) = throttled(request)
+        run {
+            if (code == 401) throw NotAuthorizedException()
             // An HTML page instead of JSON = kino.pub's web server is down or mid-maintenance (seen
             // 2026-11-08: nginx "404 Not Found" on the token refresh). Never show raw HTML.
-            if (text.trimStart().startsWith("<")) throw ApiException(resp.code, "kino.pub не отвечает (HTTP ${resp.code}), попробуйте позже")
-            if (!resp.isSuccessful && !allowErrorBody) throw ApiException(resp.code, text.take(300))
+            if (text.trimStart().startsWith("<")) throw ApiException(code, "kino.pub не отвечает (HTTP $code), попробуйте позже")
+            if (code == 429) throw ApiException(429, "kino.pub: слишком много запросов, попробуйте через минуту")
+            if (code !in 200..299 && !allowErrorBody) throw ApiException(code, text.take(300))
             if (T::class == Unit::class) Unit as T else json.decodeFromString<T>(text)
         }
     }
 
+    /**
+     * Every kino.pub call goes through here. kino.pub answers 429 "Rate limit exceeded" to bursts,
+     * and waking the TV after a night fired one (Home reload: a /watching per Continue candidate +
+     * kids classification + a stale recommendations rebuild with its searches), so the owner's
+     * next OK on a card failed. So: at most [MAX_CALLS] at once; calls made inside [background]
+     * share only [MAX_BACKGROUND] of those, so a tap never queues behind a rebuild; a 429 makes
+     * every call wait out a shared cooldown and is retried (a 429 was not applied, so even
+     * toggles are safe to resend).
+     */
+    private suspend fun throttled(request: Request): Pair<Int, String> {
+        val bg = kotlin.coroutines.coroutineContext[Background.Key] != null
+        repeat(RETRIES_429 + 1) { attempt ->
+            val wait = coolUntil - System.currentTimeMillis()
+            if (wait > 0) kotlinx.coroutines.delay(wait)
+            val (code, text) = if (bg) bgGate.withPermit { gate.withPermit { call(request) } } else gate.withPermit { call(request) }
+            if (code != 429 || attempt == RETRIES_429) return code to text
+            val pause = 3_000L shl attempt // 3, 6, 12 s
+            coolUntil = maxOf(coolUntil, System.currentTimeMillis() + pause)
+            android.util.Log.w("denopub", "kino.pub 429 on ${request.url.encodedPath} (bg=$bg), retry in ${pause / 1000} s")
+        }
+        error("unreachable")
+    }
+
+    private fun call(request: Request): Pair<Int, String> =
+        http.newCall(request).execute().use { it.code to it.body?.string().orEmpty() }
+
+    private val gate = Semaphore(MAX_CALLS)
+    private val bgGate = Semaphore(MAX_BACKGROUND)
+    @Volatile private var coolUntil = 0L
+
+    /** Marks calls as background work (Continue checks, kids flags, recommendations). */
+    object Background : kotlin.coroutines.AbstractCoroutineContextElement(Key) {
+        object Key : kotlin.coroutines.CoroutineContext.Key<Background>
+    }
+
     companion object {
+        private const val MAX_CALLS = 4
+        private const val MAX_BACKGROUND = 2
+        private const val RETRIES_429 = 3
+
+        /** Runs [block] with its kino.pub calls in the background lane. */
+        suspend fun <T> background(block: suspend kotlinx.coroutines.CoroutineScope.() -> T): T =
+            withContext(Background, block)
+
         // kino.pub moved to kino.watch (2026-11): api.service-kp.com stopped answering, while
         // kino.watch serves the same API under /api (same errors, same tokens).
         const val API_URL = "https://kino.watch/api/v1/"
