@@ -13,8 +13,8 @@ android {
         applicationId = "dev.dt.kinopub"
         minSdk = 31 // Chromecast with Google TV ships Android 12+
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
         // Self-update source (system/Updater.kt). Override for a local test: -PupdateUrl=http://10.0.2.2:8765/latest.json
         val updateUrl = (project.findProperty("updateUrl") as String?)
             ?: "https://api.github.com/repos/deetan/denopub/releases/latest"
