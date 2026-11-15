@@ -53,7 +53,8 @@ data class Forecast(
  * Weather for the screensaver, from Open-Meteo (free, no key). Location: the owner's default is Belgrade,
  * Palilula; once a day the TV also asks ipwho.is where its IP is, and if that is more than 30 km away
  * (a trip) the forecast follows the IP location (owner 2026-11-15: "Белград, Палилула дефолт, а дальше по ип").
- * Forecast refreshed at most every 30 min, kept in `filesDir/weather.json` so it shows at once.
+ * Air: trimmed mean of nearby Sensor.Community ground sensors, else the Open-Meteo/CAMS model.
+ * Forecast refreshed at most every 15 min, kept in `filesDir/weather.json` so it shows at once.
  */
 class Weather(private val http: OkHttpClient, filesDir: File) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -71,7 +72,7 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
         runCatching {
             val (lat, lon, place) = location()
             val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
-                "&current=temperature_2m,precipitation,cloud_cover,weather_code,is_day,wind_speed_10m,wind_direction_10m,wind_gusts_10m" +
+                "&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,weather_code,is_day,wind_speed_10m,wind_direction_10m,wind_gusts_10m" +
                 "&wind_speed_unit=ms" +
                 "&hourly=temperature_2m,precipitation_probability,precipitation,cloud_cover,weather_code,is_day" +
                 "&timezone=auto&forecast_days=3"
@@ -82,15 +83,45 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
                     "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=$lat&longitude=$lon&current=us_aqi,pm2_5&timezone=auto",
                 )).jsonObject["current"]!!.jsonObject
             }.onFailure { Log.w(TAG, "weather: air quality: $it") }.getOrNull()
+            // Ground sensors (Sensor.Community volunteers) beat the CAMS model when there are enough nearby.
+            val rh = o["current"]?.jsonObject?.get("relative_humidity_2m")?.jsonPrimitive?.doubleOrNull
+            val ground = runCatching { groundPm25(lat, lon)?.let { humidityCorrected(it, rh) } }.onFailure { Log.w(TAG, "weather: sensors: $it") }.getOrNull()
+            val pm25 = ground ?: air?.get("pm2_5")?.jsonPrimitive?.doubleOrNull
             parse(o, place).copy(
-                aqi = air?.get("us_aqi")?.jsonPrimitive?.doubleOrNull?.roundToInt(),
-                pm25 = air?.get("pm2_5")?.jsonPrimitive?.doubleOrNull,
+                aqi = if (ground != null) usAqi(ground) else air?.get("us_aqi")?.jsonPrimitive?.doubleOrNull?.roundToInt(),
+                pm25 = pm25,
             ).also {
                 cached = it
                 cacheFile.writeText(json.encodeToString(Forecast.serializer(), it))
                 Log.i(TAG, "weather: ${it.now.temp}° code ${it.now.code} wind ${it.windMs} aqi ${it.aqi} ${place ?: "home"}")
             }
         }.onFailure { Log.w(TAG, "weather: $it") }.getOrNull() ?: cached
+    }
+
+    /**
+     * PM2.5 of the outdoor Sensor.Community sensors within 3 km (newest reading per sensor, last ~5 min),
+     * figure-skating style (owner 2026-11-15): drop the lowest and the highest, average the rest — one
+     * sensor near Palilula reads ~170 µg/m³ while its neighbours read 5–12. Null with fewer than 3 sensors.
+     */
+    private fun groundPm25(lat: Double, lon: Double): Double? {
+        val arr = json.parseToJsonElement(fetch("https://data.sensor.community/airrohr/v1/filter/area=$lat,$lon,3")).jsonArray
+        val latest = HashMap<String, Pair<String, Double>>()
+        for (e in arr) {
+            val r = e.jsonObject
+            if (r["location"]?.jsonObject?.get("indoor")?.jsonPrimitive?.intOrNull == 1) continue
+            val id = r["sensor"]?.jsonObject?.get("id")?.jsonPrimitive?.content ?: continue
+            val ts = r["timestamp"]?.jsonPrimitive?.content ?: continue
+            val v = r["sensordatavalues"]?.jsonArray?.firstOrNull { it.jsonObject["value_type"]?.jsonPrimitive?.content == "P2" }
+                ?.jsonObject?.get("value")?.jsonPrimitive?.content?.toDoubleOrNull() ?: continue
+            if (v < 0 || v > 1000) continue
+            if ((latest[id]?.first ?: "") < ts) latest[id] = ts to v
+        }
+        val vals = latest.values.map { it.second }.sorted()
+        if (vals.size < 3) { Log.i(TAG, "weather: only ${vals.size} sensors nearby, using the model"); return null }
+        // Figure-skating style: drop the lowest and the highest, average the rest.
+        val m = vals.subList(1, vals.size - 1).average()
+        Log.i(TAG, "weather: ${vals.size} sensors PM2.5 ${vals.joinToString { "%.1f".format(it) }} -> trimmed mean %.1f".format(m))
+        return m
     }
 
     private fun fetch(url: String): String =
@@ -165,6 +196,30 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
             val dx = (lon1 - lon2) * 111.32 * cos(Math.toRadians((lat1 + lat2) / 2))
             val dy = (lat1 - lat2) * 110.57
             return sqrt(dx * dx + dy * dy)
+        }
+
+        /**
+         * Low-cost laser sensors count water-swollen particles as dust when the air is humid. κ-Köhler
+         * correction (Di Antonio et al. 2018, for SDS011): PM / (1 + (κ/1.65) / (100/RH − 1)), κ = 0.62;
+         * RH capped at 95 % (the formula explodes near saturation). No humidity known → reading as is.
+         */
+        fun humidityCorrected(pm: Double, rh: Double?): Double {
+            if (rh == null) return pm
+            val h = rh.coerceIn(0.0, 95.0)
+            val out = pm / (1 + (0.62 / 1.65) / (100 / h - 1))
+            Log.i(TAG, "weather: PM2.5 %.1f at RH %.0f%% -> %.1f".format(pm, rh, out))
+            return out
+        }
+
+        /** US AQI from PM2.5 (EPA breakpoints, 2024 revision). */
+        fun usAqi(pm: Double): Int {
+            val c = (pm * 10).toInt() / 10.0
+            val bp = listOf(
+                Triple(0.0, 9.0, 0 to 50), Triple(9.1, 35.4, 51 to 100), Triple(35.5, 55.4, 101 to 150),
+                Triple(55.5, 125.4, 151 to 200), Triple(125.5, 225.4, 201 to 300), Triple(225.5, 325.4, 301 to 500),
+            )
+            val (lo, hi, a) = bp.firstOrNull { c <= it.second } ?: return 500
+            return ((a.second - a.first) / (hi - lo) * (c - lo) + a.first).roundToInt()
         }
 
         /** Arrow showing where the wind blows TO (meteorological direction is where it comes FROM). */

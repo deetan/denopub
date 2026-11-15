@@ -214,7 +214,7 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   завтра утро 09:00 / день 14:00 / вечер 19:00 — emoji icon (WMO code for rain/snow/storm/fog, else cloud
   cover), temperature, precipitation (mm if ≥ 0.1, else probability ≥ 10 %). The band is exactly one
   1080p row wide: adding a cell means removing one (it overflowed twice). Open-Meteo forecast + air-quality
-  API (keyless; AQI is the CAMS model, hourly, not ground sensors), refreshed ≤ every 15 min, cached in
+  API (keyless). Air = **PM2.5 of outdoor Sensor.Community sensors within 3 km, figure-skating style** (≥ 3 needed; lowest and highest dropped, the rest averaged — one near Palilula reads ~170 while neighbours read 5–12), humidity-corrected (κ-Köhler, `Weather.humidityCorrected`, RH from Open-Meteo — cheap sensors read 1.5–3× high in fog), converted to US AQI (EPA 2024 breakpoints, `Weather.usAqi`); fewer sensors → the CAMS model (hourly), refreshed ≤ every 15 min, cached in
   `filesDir/weather.json`. Location: Belgrade, Palilula (44.82, 20.49 — rounded on purpose, public repo);
   ipwho.is once a day — used only if > 30 km from home (owner: "Палилула дефолт, а дальше по ип"); then the
   city name shows at the end of the band. Log: `weather:` lines.
