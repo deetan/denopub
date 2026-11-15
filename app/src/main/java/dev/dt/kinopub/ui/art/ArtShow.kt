@@ -79,7 +79,7 @@ private class Slide(val painting: Painting, val image: ImageBitmap, val serial: 
 }
 
 /** How long one painting stays (the caption shows during the middle part). */
-private const val SLIDE_MS = 60_000L
+private const val SLIDE_MS = 30_000L   // owner 2026-11-15: 60 s was too slow
 private const val FADE_MS = 2_500
 
 /**
@@ -101,14 +101,15 @@ fun ArtShow(catalog: ArtCatalog, commands: Flow<ArtCommand>) {
     var all by remember { mutableStateOf<List<Painting>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
+    fun request(p: Painting, url: String) = ImageRequest.Builder(context).data(url)
+        .httpHeaders(NetworkHeaders.Builder().set("User-Agent", ArtCatalog.USER_AGENT).build())
+        .size(if (p.panorama) Size.ORIGINAL else Size(2400, 1350))
+        .allowHardware(false)
+        .build()
+
     suspend fun fetch(p: Painting): ImageBitmap? {
         val url = p.imageUrl() ?: return null
-        val req = ImageRequest.Builder(context).data(url)
-            .httpHeaders(NetworkHeaders.Builder().set("User-Agent", ArtCatalog.USER_AGENT).build())
-            .size(if (p.panorama) Size.ORIGINAL else Size(2400, 1350))
-            .allowHardware(false)
-            .build()
-        val r = loader.execute(req)
+        val r = loader.execute(request(p, url))
         if (r !is SuccessResult) { Log.w(ArtCatalog.TAG, "art: ${p.id} failed: $url"); return null }
         return r.image.toBitmap().asImageBitmap()
     }
@@ -126,6 +127,11 @@ fun ArtShow(catalog: ArtCatalog, commands: Flow<ArtCommand>) {
             serial++
             slide = Slide(p, img, serial)
             Log.i(ArtCatalog.TAG, "art: ${p.id}")
+            // Deal the next one now and warm Coil's cache, so the switch happens when the bar ends.
+            if (pos == history.lastIndex) catalog.deal(all)?.let { n ->
+                history.add(n)
+                n.imageUrl()?.let { loader.enqueue(request(n, it)) }
+            }
             return
         }
     }
@@ -161,6 +167,17 @@ fun ArtShow(catalog: ArtCatalog, commands: Flow<ArtCommand>) {
             enter = fadeIn(tween(1200)), exit = fadeOut(tween(600)),
             modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 64.dp),
         ) { Clock(Modifier) }
+        // Thin bar along the bottom edge: how long until the next painting (restarts on ← →).
+        val progress = remember { Animatable(0f) }
+        LaunchedEffect(serial) {
+            if (serial == 0) return@LaunchedEffect
+            progress.snapTo(0f)
+            progress.animateTo(1f, tween(SLIDE_MS.toInt(), easing = LinearEasing))
+        }
+        if (slide != null) Box(
+            Modifier.align(Alignment.BottomStart).fillMaxWidth(progress.value).height(4.dp)
+                .background(Color.White.copy(alpha = 0.55f)),
+        )
     }
 }
 
@@ -176,9 +193,9 @@ private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
     var phase by remember(s.serial) { mutableIntStateOf(0) }
     LaunchedEffect(s.serial) {
         onPhase(0)
-        delay(5_000); phase = 1; onPhase(1)
-        delay(5_000); phase = 2; onPhase(2)
-        delay(SLIDE_MS - 22_000); phase = 0; onPhase(0)
+        delay(2_000); phase = 1; onPhase(1)
+        delay(2_000); phase = 2; onPhase(2)
+        delay(SLIDE_MS - 8_000); phase = 0; onPhase(0)
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
