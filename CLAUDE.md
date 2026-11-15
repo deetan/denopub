@@ -335,7 +335,8 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   emulator: the «неизвестные приложения» grant was back to "not allowed" after the first
   self-update (later updates kept it); the button handles it by reopening that screen.
 
-- **Screensaver on Google TV**: the settings UI lists only Ambient mode; a third-party dream is picked
+- **Screensaver on Google TV** (works on the owner's Chromecast, Android 14, verified 2026-11-15; Ambient
+  mode there is `com.google.android.apps.tv.dreamx/.service.Backdrop`): the settings UI lists only Ambient mode; a third-party dream is picked
   with `settings put secure screensaver_components …`. On the emulator the device simply slept at the
   idle timeout until `screensaver_activate_on_sleep=1` was set too (`tv.sh screensaver` does both).
   `cmd dreams start-dreaming` needs root; to test, set `global stay_on_while_plugged_in 0` and
