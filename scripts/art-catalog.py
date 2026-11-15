@@ -64,7 +64,10 @@ def check(items, images=False):
                 req = urllib.request.Request(url, headers={"User-Agent": UA, "Range": "bytes=0-2047"})
                 with urllib.request.urlopen(req, timeout=30) as r:
                     ctype = r.headers.get("Content-Type", "")
-                    if not ctype.startswith("image/"):
+                    head = r.read(12)
+                    # Some museums (Tate) serve real JPEGs as application/octet-stream; Android decodes by bytes.
+                    magic = head[:3] == b"\xff\xd8\xff" or head[:8] == b"\x89PNG\r\n\x1a\n" or head[8:12] == b"WEBP"
+                    if not (ctype.startswith("image/") or magic):
                         errors.append(f"{p['id']}: {ctype} from {url}")
             except Exception as e:  # noqa: BLE001
                 errors.append(f"{p['id']}: {e} from {url}")

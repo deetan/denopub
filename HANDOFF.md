@@ -47,7 +47,7 @@ Verified on the real Chromecast by the owner:
 
 ## Open items / next steps (most relevant first)
 
-0. **Paintings screensaver (2026-11-15)**: `ArtDream` + Home «Картины», 472 paintings with RU/EN
+0. **Paintings screensaver (2026-11-15)**: `ArtDream` + Home «Картины», 910 paintings (Europe, Russia, Asia, ancient world, icons) with RU/EN
    titles and child-friendly Russian stories (`assets/art/paintings.json`). **Running on the real TV**
    since 0.3.0 (2026-11-15): `scripts/tv.sh screensaver` set it, a 20 s idle test started `ArtDream`
    and the catalog refreshed from GitHub; idle timeout restored to 10 min. The TV's previous

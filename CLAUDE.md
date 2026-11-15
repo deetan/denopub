@@ -369,6 +369,9 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   `system screen_off_timeout 15000`, wait, then restore both (emulator defaults: 1 and 2147483647).
 - **Wikimedia rate limits**: many parallel API calls from one IP get HTTP 429 ("too many requests");
   batch titles (50 per `action=query`) and pause. Image downloads by the TV (one per minute) are fine.
+- **Catalog merges**: `art-catalog.py merge` skips repeated ids only — the same picture can come back
+  under a new id (Kramskoi spelled two ways); look for repeated `commons`/`url` before merging. Tate serves
+  real JPEGs as `application/octet-stream`; the checker sniffs the bytes, and Android decodes them fine.
 
 ## What NOT to touch
 
