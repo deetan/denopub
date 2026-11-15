@@ -208,10 +208,14 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   ↑ ↓ caption, anything else wakes. `art:` log lines name each painting / failed image (skipped).
   Enable on a device: `scripts/tv.sh screensaver`. Maintain: `scripts/art-catalog.py`.
 - **Weather band on the paintings** (`data/Weather.kt`, `TopBar` in `ArtShow.kt`, owner 2026-11-15): a
-  58 dp band across the top (the painting and caption are laid out below it): clock, «Сейчас», +2/+4/+6 h,
-  «Завтра» утро 09:00 / день 14:00 / вечер 19:00 — emoji icon (WMO code for rain/snow/storm/fog, else
-  cloud cover), temperature, precipitation (mm if ≥ 0.1, else probability ≥ 10 %). Open-Meteo (keyless),
-  refreshed ≤ every 30 min, cached in `filesDir/weather.json`. Location: Belgrade, Palilula by default;
+  58 dp band across the top (the painting and caption are laid out below it): clock, «Сейчас» + wind
+  («💨 8–14 м/с ↖»: speed–gusts, arrow = where it blows to) + air («AQI 87 · умеренно · PM2.5 15», US AQI
+  0–500 as IQAir shows it — the owner asked for that index, not the European one), then +3/+6 h, then
+  завтра утро 09:00 / день 14:00 / вечер 19:00 — emoji icon (WMO code for rain/snow/storm/fog, else cloud
+  cover), temperature, precipitation (mm if ≥ 0.1, else probability ≥ 10 %). The band is exactly one
+  1080p row wide: adding a cell means removing one (it overflowed twice). Open-Meteo forecast + air-quality
+  API (keyless; AQI is the CAMS model, hourly, not ground sensors), refreshed ≤ every 15 min, cached in
+  `filesDir/weather.json`. Location: Belgrade, Palilula (44.82, 20.49 — rounded on purpose, public repo);
   ipwho.is once a day — used only if > 30 km from home (owner: "Палилула дефолт, а дальше по ип"); then the
   city name shows at the end of the band. Log: `weather:` lines.
 - **Focus is the UI.** Every screen requests initial focus on its primary action; lazy rows compose

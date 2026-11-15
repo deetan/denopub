@@ -38,10 +38,15 @@ data class WeatherSlot(
 @Serializable
 data class Forecast(
     val now: WeatherSlot,
-    val hours: List<WeatherSlot>,      // in 2, 4 and 6 hours
+    val hours: List<WeatherSlot>,      // in 3 and 6 hours
     val tomorrow: List<WeatherSlot>,   // 09:00 утро, 14:00 день, 19:00 вечер
     val place: String? = null,         // shown only when not the home location
     val fetchedAt: Long,
+    val windMs: Double? = null,        // now, m/s
+    val gustMs: Double? = null,
+    val windFrom: Int? = null,         // degrees the wind blows FROM
+    val aqi: Int? = null,              // US AQI now (0–500, as IQAir etc. show it; Open-Meteo / CAMS model, hourly)
+    val pm25: Double? = null,
 )
 
 /**
@@ -62,18 +67,28 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
 
     suspend fun get(): Forecast? = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        cached?.let { if (now - it.fetchedAt < 30 * 60_000L) return@withContext it }
+        cached?.let { if (now - it.fetchedAt < 15 * 60_000L) return@withContext it }
         runCatching {
             val (lat, lon, place) = location()
             val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
-                "&current=temperature_2m,precipitation,cloud_cover,weather_code,is_day" +
+                "&current=temperature_2m,precipitation,cloud_cover,weather_code,is_day,wind_speed_10m,wind_direction_10m,wind_gusts_10m" +
+                "&wind_speed_unit=ms" +
                 "&hourly=temperature_2m,precipitation_probability,precipitation,cloud_cover,weather_code,is_day" +
                 "&timezone=auto&forecast_days=3"
             val o = json.parseToJsonElement(fetch(url)).jsonObject
-            parse(o, place).also {
+            // Air quality is a separate API; a failure there must not lose the forecast.
+            val air = runCatching {
+                json.parseToJsonElement(fetch(
+                    "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=$lat&longitude=$lon&current=us_aqi,pm2_5&timezone=auto",
+                )).jsonObject["current"]!!.jsonObject
+            }.onFailure { Log.w(TAG, "weather: air quality: $it") }.getOrNull()
+            parse(o, place).copy(
+                aqi = air?.get("us_aqi")?.jsonPrimitive?.doubleOrNull?.roundToInt(),
+                pm25 = air?.get("pm2_5")?.jsonPrimitive?.doubleOrNull,
+            ).also {
                 cached = it
                 cacheFile.writeText(json.encodeToString(Forecast.serializer(), it))
-                Log.i(TAG, "weather: ${it.now.temp}° code ${it.now.code} ${place ?: "home"}")
+                Log.i(TAG, "weather: ${it.now.temp}° code ${it.now.code} wind ${it.windMs} aqi ${it.aqi} ${place ?: "home"}")
             }
         }.onFailure { Log.w(TAG, "weather: $it") }.getOrNull() ?: cached
     }
@@ -123,7 +138,7 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
             cur["cloud_cover"]!!.jsonPrimitive.int, prob[iNow], cur["precipitation"]!!.jsonPrimitive.double,
             cur["is_day"]!!.jsonPrimitive.int == 1,
         )
-        val hours = listOf(2, 4, 6).mapNotNull { d ->
+        val hours = listOf(3, 6).mapNotNull { d ->
             val t = hourNow.plusHours(d.toLong())
             times.indexOf(t).takeIf { it >= 0 }?.let { slot(it, "%02d:00".format(t.hour)) }
         }
@@ -131,19 +146,39 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
         val tomorrow = listOf(9 to "утро", 14 to "день", 19 to "вечер").mapNotNull { (hr, label) ->
             times.indexOf(tomorrowDate.atTime(hr, 0)).takeIf { it >= 0 }?.let { slot(it, label) }
         }
-        return Forecast(now, hours, tomorrow, place, System.currentTimeMillis())
+        return Forecast(
+            now, hours, tomorrow, place, System.currentTimeMillis(),
+            windMs = cur["wind_speed_10m"]?.jsonPrimitive?.doubleOrNull,
+            gustMs = cur["wind_gusts_10m"]?.jsonPrimitive?.doubleOrNull,
+            windFrom = cur["wind_direction_10m"]?.jsonPrimitive?.doubleOrNull?.roundToInt(),
+        )
     }
 
     companion object {
         const val TAG = "denopub"
-        // Belgrade, Palilula (owner's default).
-        const val HOME_LAT = 44.814
-        const val HOME_LON = 20.478
+        // Belgrade, Palilula (owner's default, 2026-11-15). Rounded to ~1 km on purpose: the repo is public,
+        // and the forecast grid is coarser than that anyway.
+        const val HOME_LAT = 44.82
+        const val HOME_LON = 20.49
 
         fun distanceKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
             val dx = (lon1 - lon2) * 111.32 * cos(Math.toRadians((lat1 + lat2) / 2))
             val dy = (lat1 - lat2) * 110.57
             return sqrt(dx * dx + dy * dy)
+        }
+
+        /** Arrow showing where the wind blows TO (meteorological direction is where it comes FROM). */
+        fun windArrow(from: Int): String =
+            listOf("↑", "↗", "→", "↘", "↓", "↙", "←", "↖")[(((from + 180) % 360 + 22) / 45) % 8]
+
+        /** US AQI band → short Russian word and the usual colour (ARGB). */
+        fun aqiLevel(aqi: Int): Pair<String, Long> = when {
+            aqi <= 50 -> "хорошо" to 0xFF00E400
+            aqi <= 100 -> "умеренно" to 0xFFFFFF00
+            aqi <= 150 -> "вредно чувствит." to 0xFFFF7E00
+            aqi <= 200 -> "вредно" to 0xFFFF0000
+            aqi <= 300 -> "очень вредно" to 0xFF8F3F97
+            else -> "опасно" to 0xFF7E0023
         }
 
         /** Emoji for a slot: rain/snow/storm/fog from the WMO code, otherwise by cloud cover. */

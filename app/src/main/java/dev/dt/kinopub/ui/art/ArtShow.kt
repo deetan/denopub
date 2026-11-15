@@ -70,6 +70,8 @@ import coil3.toBitmap
 import dev.dt.kinopub.data.ArtCatalog
 import dev.dt.kinopub.data.Painting
 import dev.dt.kinopub.data.Weather
+import androidx.compose.foundation.layout.size
+import kotlin.math.roundToInt
 import dev.dt.kinopub.data.WeatherSlot
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
@@ -411,21 +413,40 @@ private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
     val fmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     Row(
         modifier.background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.45f), 1f to Color.Transparent))
-            .padding(start = TEXT_MARGIN.dp, end = 40.dp, top = 8.dp),
+            .padding(start = 48.dp, end = 20.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicText(fmt.format(now), style = TextStyle(color = Color.White.copy(alpha = 0.85f), fontSize = 30.sp, fontWeight = FontWeight.Light, shadow = Shadow(Color.Black, blurRadius = 8f)))
         if (f == null) return@Row
-        Spacer(Modifier.width(24.dp))
+        Spacer(Modifier.width(18.dp))
         WeatherCell(f.now, big = true)
-        f.hours.forEach { Spacer(Modifier.width(14.dp)); WeatherCell(it) }
+        // Wind and air quality, now only (owner 2026-11-15).
+        if (f.windMs != null || f.aqi != null) {
+            Spacer(Modifier.width(12.dp))
+            Column {
+                f.windMs?.let { w ->
+                    // "8–15 м/с": wind, then gusts if notably stronger.
+                    val gust = f.gustMs?.takeIf { it >= w + 2 }?.let { "–${it.roundToInt()}" } ?: ""
+                    BasicText("💨 ${w.roundToInt()}$gust м/с${f.windFrom?.let { " " + Weather.windArrow(it) } ?: ""}", style = barSmall, softWrap = false)
+                }
+                f.aqi?.let { q ->
+                    val (word, color) = Weather.aqiLevel(q)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(7.dp).background(Color(color), androidx.compose.foundation.shape.CircleShape))
+                        Spacer(Modifier.width(4.dp))
+                        BasicText("AQI $q · $word${f.pm25?.let { " · PM2.5 ${it.roundToInt()}" } ?: ""}", style = barSmall, softWrap = false)
+                    }
+                }
+            }
+        }
+        f.hours.forEach { Spacer(Modifier.width(12.dp)); WeatherCell(it) }
         if (f.tomorrow.isNotEmpty()) {
             Spacer(Modifier.width(16.dp))
             Box(Modifier.width(1.dp).height(34.dp).background(Color.White.copy(alpha = 0.3f)))
             Spacer(Modifier.width(14.dp))
-            Column {
-                BasicText("Завтра", style = barLabel)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { f.tomorrow.forEach { WeatherCell(it, showLabelAbove = false) } }
+            f.tomorrow.forEachIndexed { i, slot ->
+                if (i > 0) Spacer(Modifier.width(12.dp))
+                WeatherCell(if (i == 0) slot.copy(label = "завтра ${slot.label}") else slot)
             }
         }
         f.place?.let { Spacer(Modifier.width(18.dp)); BasicText(it, style = barLabel) }
@@ -435,7 +456,7 @@ private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
 @Composable
 private fun WeatherCell(s: WeatherSlot, big: Boolean = false, showLabelAbove: Boolean = true) {
     val precip = when {
-        s.precipMm >= 0.1 -> "%.1f мм".format(s.precipMm).replace('.', ',')
+        s.precipMm >= 0.1 -> "%.1fмм".format(s.precipMm).replace('.', ',')
         s.precipProb != null && s.precipProb >= 10 -> "${s.precipProb}%"
         else -> null
     }
