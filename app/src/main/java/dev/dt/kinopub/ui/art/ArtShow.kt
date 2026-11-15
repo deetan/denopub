@@ -13,6 +13,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -79,7 +83,7 @@ private class Slide(val painting: Painting, val image: ImageBitmap, val serial: 
 }
 
 /** How long one painting stays (the caption shows during the middle part). */
-private const val SLIDE_MS = 30_000L   // owner 2026-11-15: 60 s was too slow
+private const val SLIDE_MS = 40_000L   // owner 2026-11-15: 60 s too slow, 30 s too short for the child to read
 private const val FADE_MS = 2_500
 
 /**
@@ -181,6 +185,55 @@ fun ArtShow(catalog: ArtCatalog, commands: Flow<ArtCommand>) {
     }
 }
 
+/** Where the caption goes: beside the painting, under it, or over it (when neither leaves it big enough). */
+private enum class Place { SIDE, BOTTOM, OVER }
+
+private class Rect(val x: Float, val y: Float, val w: Float, val h: Float) {
+    fun lerp(o: Rect, t: Float) = Rect(x + (o.x - x) * t, y + (o.y - y) * t, w + (o.w - w) * t, h + (o.h - h) * t)
+}
+
+/** The largest rect of [aspect] inside the box, centred. */
+private fun fit(aspect: Float, x: Float, y: Float, w: Float, h: Float): Rect {
+    val fw = if (aspect > w / h) w else h * aspect
+    val fh = fw / aspect
+    return Rect(x + (w - fw) / 2, y + (h - fh) / 2, fw, fh)
+}
+
+// Caption sizes (sp ≈ dp at the TV's font scale). Kept small so the painting can keep its room.
+private const val TITLE_SP = 26f
+private const val EN_SP = 16f
+private const val ARTIST_SP = 15f
+private const val SUB_SP = 13f
+private const val STORY_SP = 15f
+private const val STORY_LINE = 22f
+private const val SIDE_TEXT_W = 330f
+private const val TEXT_MARGIN = 56f
+
+private fun artistLine(p: Painting) = buildString {
+    append(p.artistRu)
+    if (p.artistLife.isNotBlank()) append(" (").append(p.artistLife).append(')')
+    if (p.date.isNotBlank()) append("  ·  ").append(p.date)
+}
+
+private fun subLine(p: Painting) = listOf(p.artistEn, p.museumRu).filter { it.isNotBlank() }.joinToString("  ·  ")
+
+/** Rough height (dp) of the caption in a column [width] dp wide — enough to reserve room for it. */
+private fun captionHeight(p: Painting, width: Float): Float {
+    fun lines(text: String, sp: Float) =
+        if (text.isBlank()) 0 else kotlin.math.ceil(text.length * sp * 0.56f / width).toInt().coerceAtLeast(1)
+    var h = lines(p.titleRu, TITLE_SP) * TITLE_SP * 1.35f
+    if (p.titleEn.isNotBlank() && p.titleEn != p.titleRu) h += lines(p.titleEn, EN_SP) * EN_SP * 1.35f
+    h += 8f + lines(artistLine(p), ARTIST_SP) * ARTIST_SP * 1.35f + lines(subLine(p), SUB_SP) * SUB_SP * 1.35f
+    if (p.story.isNotBlank()) h += 10f + (lines(p.story, STORY_SP) + 1) * STORY_LINE
+    return h
+}
+
+/** Positions a child at an absolute rect (dp), larger than the parent if need be. */
+private fun Modifier.placeAt(r: Rect) = layout { m, c ->
+    val pl = m.measure(Constraints.fixed(r.w.dp.roundToPx().coerceAtLeast(1), r.h.dp.roundToPx().coerceAtLeast(1)))
+    layout(c.maxWidth, c.maxHeight) { pl.place(r.x.dp.roundToPx(), r.y.dp.roundToPx()) }
+}
+
 @Composable
 private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
     val p = s.painting
@@ -199,100 +252,108 @@ private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val screenAspect = maxWidth / maxHeight
+        // Everything in dp (a 1080p TV is 960×540 dp).
+        val W = maxWidth.value
+        val H = maxHeight.value
+        val a = s.aspect
+        val m = 24f
+        val fillsScreen = kotlin.math.abs(a / (W / H) - 1f) < 0.08f
+        val full = if (fillsScreen) fit(a, 0f, 0f, W, H) else fit(a, m, m, W - 2 * m, H - 2 * m)
+        val sideText = captionHeight(p, SIDE_TEXT_W)
+        val bottomBand = captionHeight(p, W - 2 * TEXT_MARGIN) + 28f
+        // The painting makes room for the caption: beside it or above it, whichever keeps it bigger;
+        // if both would shrink it too much, the caption goes over it on a scrim.
+        val sideX = TEXT_MARGIN + SIDE_TEXT_W + 32f
+        val side = if (sideText <= H - 80f) fit(a, sideX, m, W - sideX - 40f, H - 2 * m) else null
+        val bottom = fit(a, m, 16f, W - 2 * m, H - bottomBand - 24f)
+        val place = remember(s.serial, W, H) {
+            val best = maxOf(side?.w ?: 0f, bottom.w)
+            when {
+                s.panorama -> Place.BOTTOM
+                best < 0.58f * full.w -> Place.OVER
+                side != null && side.w >= bottom.w -> Place.SIDE
+                else -> Place.BOTTOM
+            }
+        }
+        // ↑ ↓ hide the caption: the painting grows back to full size, smoothly.
+        val t by animateFloatAsState(if (captionOn && place != Place.OVER) 1f else 0f, tween(900), label = "room")
+
+        // The painting's own colours, blurred and dimmed, fill the space around it.
+        Image(
+            s.image, null, contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.15f; scaleY = 1.15f; alpha = 0.8f }.blur(48.dp),
+        )
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
+
         if (s.panorama) {
-            // Full height, panned from one end to the other.
-            val imgW = maxHeight * s.aspect
-            val travel = with(LocalDensity.current) { (imgW - maxWidth).toPx() }
+            // Full width of the scroll at the available height, panned from one end to the other.
+            val h = H + ((H - bottomBand - 16f) - H) * t
+            val w = h * a
             Image(
                 s.image, p.titleRu, contentScale = ContentScale.FillBounds,
-                modifier = Modifier.align(Alignment.CenterStart).requiredSize(imgW, maxHeight)
-                    .graphicsLayer {
-                        // requiredSize centres the oversized image, so its left edge starts at -travel/2.
-                        translationX = travel / 2 - travel * drift.value
-                    },
+                modifier = Modifier.placeAt(Rect(-(w - W).coerceAtLeast(0f) * drift.value, 0f, w, h)),
             )
         } else {
-            val fillsScreen = kotlin.math.abs(s.aspect / screenAspect - 1f) < 0.08f
-            // Tall works leave room beside them: the painting moves right, the caption stands to its left.
-            // (A 1080p TV is 960×540 dp.)
-            val paintH = maxHeight - 32.dp
-            val paintW = paintH * s.aspect
-            val sideW = maxWidth - paintW - 48.dp - 64.dp - 36.dp
-            val side = !fillsScreen && sideW >= 300.dp
-            if (!fillsScreen) {
-                // The painting's own colours, blurred and dimmed, fill the space around it.
-                Image(
-                    s.image, null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.15f; scaleY = 1.15f; alpha = 0.8f }.blur(48.dp),
-                )
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (side) 0.45f else 0.3f)))
-            }
             val ox = remember(s.serial) { 0.25f + rnd.nextFloat() * 0.5f }
             val oy = remember(s.serial) { 0.25f + rnd.nextFloat() * 0.5f }
             val zoomIn = remember(s.serial) { rnd.nextBoolean() }
-            val kenBurns = Modifier.graphicsLayer {
-                val z = (if (side) 0.04f else 0.08f) * if (zoomIn) drift.value else 1f - drift.value
-                scaleX = 1f + z; scaleY = 1f + z
-                transformOrigin = TransformOrigin(ox, oy)
-            }
-            if (side) {
-                Image(
-                    s.image, p.titleRu, contentScale = ContentScale.Fit,
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 48.dp).requiredSize(paintW, paintH).then(kenBurns),
-                )
-                Caption(p, phase, captionOn, side = true, Modifier.align(Alignment.CenterStart).padding(start = 64.dp).widthIn(max = sideW.coerceAtMost(480.dp)))
-            } else {
-                Image(
-                    s.image, p.titleRu,
-                    contentScale = if (fillsScreen) ContentScale.Crop else ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(if (fillsScreen) 0.dp else 24.dp).then(kenBurns),
-                )
-            }
-            if (side) return@BoxWithConstraints
+            val target = when (place) { Place.SIDE -> side!!; Place.BOTTOM -> bottom; Place.OVER -> full }
+            Image(
+                s.image, p.titleRu, contentScale = ContentScale.FillBounds,
+                modifier = Modifier.placeAt(full.lerp(target, t)).graphicsLayer {
+                    val z = (0.08f - 0.05f * t) * if (zoomIn) drift.value else 1f - drift.value
+                    scaleX = 1f + z; scaleY = 1f + z
+                    transformOrigin = TransformOrigin(ox, oy)
+                },
+            )
         }
-        Caption(p, phase, captionOn, side = false, Modifier.align(Alignment.BottomStart))
+        when (place) {
+            Place.SIDE -> Caption(p, phase, captionOn, place, Modifier.align(Alignment.CenterStart).padding(start = TEXT_MARGIN.dp).width(SIDE_TEXT_W.dp))
+            else -> Caption(p, phase, captionOn, place, Modifier.align(Alignment.BottomStart))
+        }
     }
 }
 
-private val shadow = Shadow(Color.Black.copy(alpha = 0.85f), blurRadius = 12f)
+private val shadow = Shadow(Color.Black.copy(alpha = 0.85f), blurRadius = 10f)
 private val serif = FontFamily.Serif
 
 @Composable
-private fun Caption(p: Painting, phase: Int, on: Boolean, side: Boolean, modifier: Modifier) {
+private fun Caption(p: Painting, phase: Int, on: Boolean, place: Place, modifier: Modifier) {
     AnimatedVisibility(
         visible = on && phase >= 1, modifier = modifier,
-        enter = fadeIn(tween(1200)) + slideInVertically(tween(1200)) { it / 6 },
-        exit = fadeOut(tween(1500)),
+        enter = fadeIn(tween(1000)) + slideInVertically(tween(1000)) { it / 8 },
+        exit = fadeOut(tween(1200)),
     ) {
-        // Beside a tall painting the dimmed backdrop is calm enough; over a picture a scrim keeps it readable.
+        // Over the picture a scrim keeps it readable; beside or under it the dimmed backdrop is enough.
         Box(
-            if (side) Modifier else Modifier.fillMaxWidth().background(
-                Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color.Black.copy(alpha = 0.55f), 1f to Color.Black.copy(alpha = 0.85f)),
-            ),
+            when (place) {
+                Place.SIDE -> Modifier
+                Place.BOTTOM -> Modifier.fillMaxWidth()
+                Place.OVER -> Modifier.fillMaxWidth().background(
+                    Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color.Black.copy(alpha = 0.5f), 1f to Color.Black.copy(alpha = 0.8f)),
+                )
+            },
         ) {
-            Column(if (side) Modifier else Modifier.padding(start = 64.dp, end = 64.dp, top = 96.dp, bottom = 44.dp).widthIn(max = 1150.dp)) {
-                BasicText(p.titleRu, style = TextStyle(color = Color.White, fontSize = 40.sp, fontFamily = serif, fontWeight = FontWeight.Medium, shadow = shadow))
+            Column(
+                if (place == Place.SIDE) Modifier
+                else Modifier.padding(start = TEXT_MARGIN.dp, end = TEXT_MARGIN.dp, top = if (place == Place.OVER) 64.dp else 0.dp, bottom = 22.dp),
+            ) {
+                BasicText(p.titleRu, style = TextStyle(color = Color.White, fontSize = TITLE_SP.sp, fontFamily = serif, fontWeight = FontWeight.Medium, shadow = shadow))
                 if (p.titleEn.isNotBlank() && p.titleEn != p.titleRu) {
-                    BasicText(p.titleEn, style = TextStyle(color = Color.White.copy(alpha = 0.72f), fontSize = 21.sp, fontFamily = serif, fontStyle = FontStyle.Italic, shadow = shadow))
+                    BasicText(p.titleEn, style = TextStyle(color = Color.White.copy(alpha = 0.72f), fontSize = EN_SP.sp, fontFamily = serif, fontStyle = FontStyle.Italic, shadow = shadow))
                 }
-                Spacer(Modifier.height(12.dp))
-                val artist = buildString {
-                    append(p.artistRu)
-                    if (p.artistLife.isNotBlank()) append(" (").append(p.artistLife).append(')')
-                    if (p.date.isNotBlank()) append("  ·  ").append(p.date)
-                }
-                BasicText(artist, style = TextStyle(color = Color.White, fontSize = 20.sp, shadow = shadow))
-                val sub = listOf(p.artistEn, p.museumRu).filter { it.isNotBlank() }.joinToString("  ·  ")
-                if (sub.isNotBlank()) BasicText(sub, style = TextStyle(color = Color.White.copy(alpha = 0.65f), fontSize = 16.sp, shadow = shadow))
+                Spacer(Modifier.height(8.dp))
+                BasicText(artistLine(p), style = TextStyle(color = Color.White, fontSize = ARTIST_SP.sp, shadow = shadow))
+                val sub = subLine(p)
+                if (sub.isNotBlank()) BasicText(sub, style = TextStyle(color = Color.White.copy(alpha = 0.65f), fontSize = SUB_SP.sp, shadow = shadow))
                 AnimatedVisibility(
                     visible = phase >= 2 && p.story.isNotBlank(),
-                    enter = fadeIn(tween(1500)) + expandVertically(tween(1200)),
+                    enter = fadeIn(tween(1200)) + expandVertically(tween(1000)),
                     exit = fadeOut(tween(800)) + shrinkVertically(tween(800)),
                 ) {
                     BasicText(
-                        p.story, Modifier.padding(top = 16.dp),
-                        style = TextStyle(color = Color.White.copy(alpha = 0.92f), fontSize = 19.sp, lineHeight = 28.sp, shadow = shadow),
+                        p.story, Modifier.padding(top = 10.dp),
+                        style = TextStyle(color = Color.White.copy(alpha = 0.92f), fontSize = STORY_SP.sp, lineHeight = STORY_LINE.sp, shadow = shadow),
                     )
                 }
             }

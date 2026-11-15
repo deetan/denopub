@@ -193,10 +193,15 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   one); dealt from a persisted shuffled deck (no repeats until all shown). Images: Commons
   `Special:FilePath?width=` 1280 (portrait) / 1920 / 3840 (panorama) with a descriptive User-Agent;
   copyrighted 20th-century works by direct URL (owner accepted that) — never store images in the
-  repo. One painting = 30 s (owner 2026-11-15: 60 s too slow): 2 s clean → title block → story at 4 s →
-  clean for the last 4 s; a 4 dp white bar along the bottom fills until the switch (restarts on ← →); the
-  next painting is dealt and pre-loaded into Coil's cache so the switch lands on time; 2.5 s cross-fade; Ken Burns ±8 % (4 % beside a caption). Tall works stand right with the caption to the
-  left on their own blurred colours; wide ones get a bottom scrim; aspect > 2.3 pans end to end.
+  repo. One painting = 40 s (owner 2026-11-15: 60 s too slow, 30 s too short for the child to read): 2 s
+  clean → title block → story at 4 s → clean for the last 4 s; a 4 dp white bar along the bottom fills
+  until the switch (restarts on ← →); the next painting is dealt and pre-loaded into Coil's cache so the
+  switch lands on time; 2.5 s cross-fade. **Text never covers the painting if it can help it** (owner
+  2026-11-15): small caption (title 26 sp, story 15 sp), its height estimated from the text length
+  (`captionHeight`); the painting shrinks into the room left beside the caption (330 dp column) or above
+  it (bottom band), whichever keeps it bigger; only if both leave < 58 % of its full width does the
+  caption go over it on a scrim. Panoramas pan above a bottom band. ↑ ↓ hide the caption and the
+  painting grows back to full size. Ken Burns 8 % at full size, 3 % beside a caption.
   Layout uses the **bitmap's** aspect, catalog `w`/`h` only pick the download size. Keys: ← → prev/next,
   ↑ ↓ caption, anything else wakes. `art:` log lines name each painting / failed image (skipped).
   Enable on a device: `scripts/tv.sh screensaver`. Maintain: `scripts/art-catalog.py`.
