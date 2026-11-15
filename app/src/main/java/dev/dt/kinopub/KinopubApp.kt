@@ -53,6 +53,7 @@ class AppContainer(app: Application) {
     val sport = dev.dt.kinopub.data.Sport(api, http, app.filesDir)
     val updater = dev.dt.kinopub.system.Updater(app, http)
     val art = dev.dt.kinopub.data.ArtCatalog(app, http)
+    val weather = dev.dt.kinopub.data.Weather(http, app.filesDir)
     val recs = dev.dt.kinopub.data.Recommender(api, dev.dt.kinopub.data.api.MoviesRecs(http), app.filesDir, appScope)
 
     /** A "resume this" request from a deep link (Google TV Continue watching row). */

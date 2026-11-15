@@ -55,7 +55,9 @@ rises — title in Russian and English, artist with life dates, date, museum —
 written for a child, and the picture is left clean again before the next. A painting stays 40 s; a
 thin bar along the bottom edge shows when the next one comes. The painting moves aside for the caption
 (beside or above it), so the text doesn't cover it. ← → previous/next, ↑ ↓ hide
-or show the caption, any other key wakes the TV. The same show opens from Home's «Картины» button.
+or show the caption, any other key wakes the TV. A band across the top shows the time and the weather (now, the next hours, tomorrow
+morning/day/evening: cloudiness, temperature, precipitation; Open-Meteo, Belgrade by default, follows the
+TV's IP location when it is elsewhere). The same show opens from Home's «Картины» button.
 The catalog (`app/src/main/assets/art/paintings.json`, texts only) is re-read from GitHub `main`
 daily, so adding paintings needs no release; images load by URL (Wikimedia Commons, or a direct URL
 for works still under copyright) and are never stored in the repo.
@@ -191,6 +193,7 @@ app/src/main/java/dev/dt/kinopub/
   data/Art.kt              screensaver catalog: bundled JSON + daily refresh from GitHub, shuffled deck
   ui/art/                  ArtShow (paintings, Ken Burns, captions), ArtActivity (Home «Картины»)
   system/ArtDream.kt       the DreamService (system screensaver) hosting ArtShow
+  data/Weather.kt          screensaver weather: Open-Meteo forecast, home location + IP fallback
   ui/theme/Theme.kt        design tokens (object K)
 docs/kinopub-api.md        kino.pub API reference (verified vs UNVERIFIED notes)
 docs/design-prompt.md      UI spec / prompt for visual design

@@ -69,6 +69,11 @@ import coil3.size.Size
 import coil3.toBitmap
 import dev.dt.kinopub.data.ArtCatalog
 import dev.dt.kinopub.data.Painting
+import dev.dt.kinopub.data.Weather
+import dev.dt.kinopub.data.WeatherSlot
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxHeight
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -96,7 +101,7 @@ private const val FADE_MS = 2_500
  * ([dev.dt.kinopub.system.ArtDream]) and by [ArtActivity].
  */
 @Composable
-fun ArtShow(catalog: ArtCatalog, commands: Flow<ArtCommand>) {
+fun ArtShow(catalog: ArtCatalog, weather: Weather, commands: Flow<ArtCommand>) {
     val context = LocalContext.current
     val loader = remember { SingletonImageLoader.get(context) }
     var slide by remember { mutableStateOf<Slide?>(null) }
@@ -168,12 +173,10 @@ fun ArtShow(catalog: ArtCatalog, commands: Flow<ArtCommand>) {
         Crossfade(targetState = slide, animationSpec = tween(FADE_MS), label = "art") { s ->
             if (s != null) SlideView(s, captionOn) { if (s === slide) phase = it }
         }
-        // The clock shows only while no caption is up (a long story beside a tall painting reaches the top).
-        AnimatedVisibility(
-            visible = slide != null && (phase == 0 || !captionOn),
-            enter = fadeIn(tween(1200)), exit = fadeOut(tween(600)),
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = 64.dp),
-        ) { Clock(Modifier) }
+        // Clock + weather along the top; the painting and its caption are laid out below it.
+        var forecast by remember { mutableStateOf(weather.last()) }
+        LaunchedEffect(Unit) { while (true) { weather.get()?.let { forecast = it }; delay(10 * 60_000L) } }
+        if (slide != null) TopBar(forecast, Modifier.align(Alignment.TopStart).fillMaxWidth().height(TOP_BAR.dp))
         // Thin bar along the bottom edge: how long until the next painting (restarts on ← →).
         val progress = remember { Animatable(0f) }
         LaunchedEffect(serial) {
@@ -260,8 +263,15 @@ private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
         delay(SLIDE_MS - 8_000); phase = 0; onPhase(0)
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        // Everything in dp (a 1080p TV is 960×540 dp).
+    Box(Modifier.fillMaxSize()) {
+        // The painting's own colours, blurred and dimmed, fill the space around it.
+    Image(
+        s.image, null, contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.15f; scaleY = 1.15f; alpha = 0.8f }.blur(48.dp),
+    )
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
+    // Below the clock + weather band (see TopBar); everything in dp (a 1080p TV is 960×540 dp).
+    BoxWithConstraints(Modifier.fillMaxSize().padding(top = TOP_BAR.dp)) {
         val W = maxWidth.value
         val H = maxHeight.value
         val a = s.aspect
@@ -299,12 +309,6 @@ private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
         // ↑ ↓ hide the caption: the painting grows back to full size, smoothly.
         val t by animateFloatAsState(if (captionOn && place != Place.OVER) 1f else 0f, tween(900), label = "room")
 
-        // The painting's own colours, blurred and dimmed, fill the space around it.
-        Image(
-            s.image, null, contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = 1.15f; scaleY = 1.15f; alpha = 0.8f }.blur(48.dp),
-        )
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
 
         if (s.panorama) {
             // Full width of the scroll at the available height, panned from one end to the other.
@@ -336,6 +340,7 @@ private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
             else -> Caption(p, phase, captionOn, place, Modifier.align(Alignment.BottomStart))
         }
     }
+}
 }
 
 private val shadow = Shadow(Color.Black.copy(alpha = 0.85f), blurRadius = 10f)
@@ -388,10 +393,60 @@ private fun Caption(p: Painting, phase: Int, on: Boolean, place: Place, modifier
     }
 }
 
+/** Height of the clock + weather band at the top. */
+private const val TOP_BAR = 58f
+
+private val barLabel = TextStyle(color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, shadow = Shadow(Color.Black, blurRadius = 8f))
+private val barValue = TextStyle(color = Color.White, fontSize = 17.sp, shadow = Shadow(Color.Black, blurRadius = 8f))
+private val barSmall = TextStyle(color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, shadow = Shadow(Color.Black, blurRadius = 8f))
+
+/**
+ * Clock and weather (owner 2026-11-15): now, in 2/4/6 hours, tomorrow morning/day/evening — icon for
+ * cloudiness/rain/snow, temperature, chance (or amount) of precipitation.
+ */
 @Composable
-private fun Clock(modifier: Modifier) {
+private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) { while (true) { now = Date(); delay(10_000) } }
     val fmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    BasicText(fmt.format(now), modifier, style = TextStyle(color = Color.White.copy(alpha = 0.7f), fontSize = 30.sp, fontWeight = FontWeight.Light, shadow = shadow))
+    Row(
+        modifier.background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.45f), 1f to Color.Transparent))
+            .padding(start = TEXT_MARGIN.dp, end = 40.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(fmt.format(now), style = TextStyle(color = Color.White.copy(alpha = 0.85f), fontSize = 30.sp, fontWeight = FontWeight.Light, shadow = Shadow(Color.Black, blurRadius = 8f)))
+        if (f == null) return@Row
+        Spacer(Modifier.width(24.dp))
+        WeatherCell(f.now, big = true)
+        f.hours.forEach { Spacer(Modifier.width(14.dp)); WeatherCell(it) }
+        if (f.tomorrow.isNotEmpty()) {
+            Spacer(Modifier.width(16.dp))
+            Box(Modifier.width(1.dp).height(34.dp).background(Color.White.copy(alpha = 0.3f)))
+            Spacer(Modifier.width(14.dp))
+            Column {
+                BasicText("Завтра", style = barLabel)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { f.tomorrow.forEach { WeatherCell(it, showLabelAbove = false) } }
+            }
+        }
+        f.place?.let { Spacer(Modifier.width(18.dp)); BasicText(it, style = barLabel) }
+    }
+}
+
+@Composable
+private fun WeatherCell(s: WeatherSlot, big: Boolean = false, showLabelAbove: Boolean = true) {
+    val precip = when {
+        s.precipMm >= 0.1 -> "%.1f мм".format(s.precipMm).replace('.', ',')
+        s.precipProb != null && s.precipProb >= 10 -> "${s.precipProb}%"
+        else -> null
+    }
+    Column {
+        if (showLabelAbove) BasicText(s.label, style = barLabel)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (!showLabelAbove) { BasicText(s.label, style = barSmall, softWrap = false); Spacer(Modifier.width(3.dp)) }
+            BasicText(Weather.icon(s), style = barValue.copy(fontSize = if (big) 19.sp else 15.sp))
+            Spacer(Modifier.width(3.dp))
+            BasicText("${if (s.temp > 0) "+" else ""}${s.temp}°", style = barValue.copy(fontSize = if (big) 19.sp else 15.sp))
+            if (precip != null) { Spacer(Modifier.width(3.dp)); BasicText("💧$precip", style = barSmall, softWrap = false, maxLines = 1) }
+        }
+    }
 }

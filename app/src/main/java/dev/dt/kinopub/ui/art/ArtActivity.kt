@@ -21,7 +21,7 @@ class ArtActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val catalog = (application as KinopubApp).container.art
-        setContent { ArtShow(catalog, commands) }
+        setContent { ArtShow(catalog, (application as KinopubApp).container.weather, commands) }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {

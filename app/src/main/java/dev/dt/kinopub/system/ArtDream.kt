@@ -46,7 +46,7 @@ class ArtDream : DreamService(), LifecycleOwner, SavedStateRegistryOwner, ViewMo
         isFullscreen = true
         isScreenBright = true
         val catalog = (application as KinopubApp).container.art
-        val view = ComposeView(this).apply { setContent { ArtShow(catalog, commands) } }
+        val view = ComposeView(this).apply { setContent { ArtShow(catalog, (application as KinopubApp).container.weather, commands) } }
         window.decorView.let {
             it.setViewTreeLifecycleOwner(this)
             it.setViewTreeSavedStateRegistryOwner(this)

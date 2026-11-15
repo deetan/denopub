@@ -207,6 +207,13 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   Layout uses the **bitmap's** aspect, catalog `w`/`h` only pick the download size. Keys: ← → prev/next,
   ↑ ↓ caption, anything else wakes. `art:` log lines name each painting / failed image (skipped).
   Enable on a device: `scripts/tv.sh screensaver`. Maintain: `scripts/art-catalog.py`.
+- **Weather band on the paintings** (`data/Weather.kt`, `TopBar` in `ArtShow.kt`, owner 2026-11-15): a
+  58 dp band across the top (the painting and caption are laid out below it): clock, «Сейчас», +2/+4/+6 h,
+  «Завтра» утро 09:00 / день 14:00 / вечер 19:00 — emoji icon (WMO code for rain/snow/storm/fog, else
+  cloud cover), temperature, precipitation (mm if ≥ 0.1, else probability ≥ 10 %). Open-Meteo (keyless),
+  refreshed ≤ every 30 min, cached in `filesDir/weather.json`. Location: Belgrade, Palilula by default;
+  ipwho.is once a day — used only if > 30 km from home (owner: "Палилула дефолт, а дальше по ип"); then the
+  city name shows at the end of the band. Log: `weather:` lines.
 - **Focus is the UI.** Every screen requests initial focus on its primary action; lazy rows compose
   late, so focus requests retry briefly.
 
