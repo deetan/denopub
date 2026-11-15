@@ -345,7 +345,11 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 
 - **The screensaver stops with the TV and comes back by itself**: when the TV goes off (CEC) the
   dongle sleeps and the dream ends; with the TV on and no input for `system screen_off_timeout`
-  (owner's TV: 600000 = 10 min) it starts again (seen 2026-11-15: `mWakefulness=Dreaming` with ArtDream).
+  it starts again (seen 2026-11-15: `mWakefulness=Dreaming` with ArtDream). The dongle then sleeps (and
+  turns the TV off over CEC) at `secure sleep_timeout`, counted from the last key press too — so the
+  paintings play for sleep − screensaver. Owner's TV since 2026-11-15 (his choice): screensaver after
+  5 min (`system screen_off_timeout` 300000), sleep after 65 min (`secure sleep_timeout` 3900000) →
+  about an hour of paintings. Was 10 / 20 min, which left only 10 min of paintings.
 - **Screensaver on Google TV** (works on the owner's Chromecast, Android 14, verified 2026-11-15; Ambient
   mode there is `com.google.android.apps.tv.dreamx/.service.Backdrop`): the settings UI lists only Ambient mode; a third-party dream is picked
   with `settings put secure screensaver_components …`. On the emulator the device simply slept at the
