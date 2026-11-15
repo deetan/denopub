@@ -49,6 +49,15 @@ few minutes while Home is open; the focused channel plays live, muted, right in 
 Track picks are saved per title and applied to the next episode automatically. Playback asks
 kino.pub for HEVC, 4K and HDR streams and uses a SurfaceView so HDR10 and Dolby Vision reach the TV.
 
+**Paintings screensaver** («Картины»): the TV's screensaver shows famous paintings, classic to
+contemporary, full-screen with a slow pan/zoom and cross-fades. A few seconds into each one a caption
+rises — title in Russian and English, artist with life dates, date, museum — then a short story
+written for a child, and the picture is left clean again before the next. ← → previous/next, ↑ ↓ hide
+or show the caption, any other key wakes the TV. The same show opens from Home's «Картины» button.
+The catalog (`app/src/main/assets/art/paintings.json`, texts only) is re-read from GitHub `main`
+daily, so adding paintings needs no release; images load by URL (Wikimedia Commons, or a direct URL
+for works still under copyright) and are never stored in the repo.
+
 **On the owner's TV** (Hisense VIDAA + this Chromecast): the TV starts on the dongle's input
 ("Default Startup Page = Last Accessed Source"), and denopub is the first app tile on Google TV.
 Google TV's own "Continue watching" row and widgets are not available to sideloaded apps.
@@ -177,6 +186,9 @@ app/src/main/java/dev/dt/kinopub/
   system/                  WatchNext (Google TV row, filtered), WakeService (inert, declined),
                            Updater (self-update from GitHub Releases + PackageInstaller)
   ui/home/UpdateButton.kt  the ↑ «Обновить до …» button on Home
+  data/Art.kt              screensaver catalog: bundled JSON + daily refresh from GitHub, shuffled deck
+  ui/art/                  ArtShow (paintings, Ken Burns, captions), ArtActivity (Home «Картины»)
+  system/ArtDream.kt       the DreamService (system screensaver) hosting ArtShow
   ui/theme/Theme.kt        design tokens (object K)
 docs/kinopub-api.md        kino.pub API reference (verified vs UNVERIFIED notes)
 docs/design-prompt.md      UI spec / prompt for visual design
@@ -186,6 +198,7 @@ docs/lenapub-kit/          self-contained prompt + assets + reference screenshot
                            to rebuild this app as "lenapub" for another TV (start: START-HERE.md)
 scripts/tv.sh              Wi-Fi deploy helper
 scripts/release.sh         version bump + build + GitHub release for the TV's self-update
+scripts/art-catalog.py     check / merge / stats for the paintings catalog
 ```
 
 ## Deploy
@@ -214,6 +227,15 @@ on the TV. Two ways to get a new version there:
   the TV lands on the Google TV home screen — open denopub again (Android blocks a self-relaunch
   from the background).
 - **adb over Wi-Fi** (development): `scripts/tv.sh deploy`, as above.
+
+**Screensaver (one time per device).** Google TV's settings only offer its own Ambient mode, so the
+paintings screensaver is selected over adb: `scripts/tv.sh screensaver` (sets `secure
+screensaver_components` to `dev.dt.kinopub/.system.ArtDream`, plus `screensaver_enabled` and
+`screensaver_activate_on_sleep`); `scripts/tv.sh screensaver off` goes back to Ambient mode. It starts
+after the TV's normal screensaver delay (Settings → System → Energy/Ambient mode timeout).
+
+**New paintings** need no release: edit `app/src/main/assets/art/paintings.json`, run
+`scripts/art-catalog.py check --images`, push to `main`; the TV picks it up within a day.
 
 The signing key is `~/.android/debug.keystore` on the owner's Mac (cert SHA-256 `ef48301c…`, pinned
 in `scripts/release.sh`). An APK signed with any other key is refused by the TV, and uninstalling

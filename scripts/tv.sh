@@ -7,6 +7,7 @@
 #   scripts/tv.sh run                    launch without rebuilding
 #   scripts/tv.sh logs                   app logcat
 #   scripts/tv.sh shot [file.png]        screenshot of the TV
+#   scripts/tv.sh screensaver [off]      make the paintings screensaver the system one (off = back to Ambient)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -50,5 +51,19 @@ case $cmd in
   run)     ensure_connected; adb shell am start -n "$PKG/.MainActivity" ;;
   logs)    ensure_connected; adb logcat --pid="$(adb shell pidof -s $PKG)" ;;
   shot)    ensure_connected; f=${2:-tv-$(date +%H%M%S).png}; adb exec-out screencap -p > "$f"; echo "$f" ;;
-  *) sed -n '2,10p' "$0"; exit 1 ;;
+  screensaver)
+    ensure_connected
+    if [[ ${2:-} == off ]]; then
+      adb shell settings delete secure screensaver_components
+      echo "Screensaver back to the system default"
+    else
+      # Remember the current one so "off" can be done by hand if needed.
+      echo "was: $(adb shell settings get secure screensaver_components)"
+      adb shell settings put secure screensaver_enabled 1
+      # Without this the device just sleeps at the idle timeout (seen on the emulator).
+      adb shell settings put secure screensaver_activate_on_sleep 1
+      adb shell settings put secure screensaver_components "$PKG/.system.ArtDream"
+      echo "now: $(adb shell settings get secure screensaver_components)"
+    fi ;;
+  *) sed -n '2,11p' "$0"; exit 1 ;;
 esac

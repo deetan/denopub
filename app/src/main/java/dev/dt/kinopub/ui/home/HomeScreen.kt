@@ -450,6 +450,12 @@ fun HomeScreen(
                     else runCatching { firstFocus.requestFocus() }.isSuccess
                 },
         ) { Text("Поиск") }
+        // The paintings show (same as the screensaver, ui/art/ArtShow.kt) on demand.
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        OutlinedButton(
+            onClick = { ctx.startActivity(android.content.Intent(ctx, dev.dt.kinopub.ui.art.ArtActivity::class.java)) },
+            modifier = backToCards,
+        ) { Text("Картины") }
         }
         if (exitArmed) {
             Text(

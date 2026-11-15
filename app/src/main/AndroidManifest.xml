@@ -45,6 +45,26 @@
             </intent-filter>
         </activity>
 
+        <!-- Paintings show on demand (Home «Картины»); exported for `adb shell am start` tests. -->
+        <activity
+            android:name=".ui.art.ArtActivity"
+            android:exported="true"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.Kinopub" />
+
+        <!-- Paintings screensaver. Google TV lists only Ambient mode, so it is enabled with adb:
+             scripts/tv.sh screensaver -->
+        <service
+            android:name=".system.ArtDream"
+            android:exported="true"
+            android:label="@string/art_dream_label"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
         <!-- Self-update: PackageInstaller session result; log line after the update. -->
         <receiver android:name=".system.InstallResultReceiver" android:exported="false" />
         <receiver android:name=".system.UpdatedReceiver" android:exported="false">

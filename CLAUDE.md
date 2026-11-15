@@ -184,6 +184,21 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Series mark**: `PosterCard(serial = true)` puts a quiet «сериал» tag (black 55 %, labelSmall)
   bottom-left on the poster — wishlist, new/popular rows, search. Films carry none (owner asked for a
   subtle mark, 2026-11-07).
+- **Paintings screensaver** (`data/Art.kt`, `ui/art/ArtShow.kt`, `system/ArtDream.kt`, owner 2026-11-15:
+  "so the child gets used to the classics"): a `DreamService` in this APK (Compose hosted by hand: the
+  dream is its own Lifecycle/SavedState/ViewModelStore owner) and the same `ArtShow` in `ArtActivity`
+  (Home «Картины»). Catalog = `assets/art/paintings.json` (RU+EN titles, date, artist + life dates,
+  museum, Russian story for a child, `commons` file name or direct `url`, `w`/`h`), refreshed daily
+  from GitHub `main` into `filesDir/art.json` (used only if it has ≥ as many entries as the bundled
+  one); dealt from a persisted shuffled deck (no repeats until all shown). Images: Commons
+  `Special:FilePath?width=` 1280 (portrait) / 1920 / 3840 (panorama) with a descriptive User-Agent;
+  copyrighted 20th-century works by direct URL (owner accepted that) — never store images in the
+  repo. One painting = 60 s: 5 s clean → title block → story → clean for the last 12 s; 2.5 s
+  cross-fade; Ken Burns ±8 % (4 % beside a caption). Tall works stand right with the caption to the
+  left on their own blurred colours; wide ones get a bottom scrim; aspect > 2.3 pans end to end.
+  Layout uses the **bitmap's** aspect, catalog `w`/`h` only pick the download size. Keys: ← → prev/next,
+  ↑ ↓ caption, anything else wakes. `art:` log lines name each painting / failed image (skipped).
+  Enable on a device: `scripts/tv.sh screensaver`. Maintain: `scripts/art-catalog.py`.
 - **Focus is the UI.** Every screen requests initial focus on its primary action; lazy rows compose
   late, so focus requests retry briefly.
 
@@ -319,6 +334,14 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   size, and a size-only "already downloaded" check reinstalled the previous APK. Seen once on the
   emulator: the «неизвестные приложения» grant was back to "not allowed" after the first
   self-update (later updates kept it); the button handles it by reopening that screen.
+
+- **Screensaver on Google TV**: the settings UI lists only Ambient mode; a third-party dream is picked
+  with `settings put secure screensaver_components …`. On the emulator the device simply slept at the
+  idle timeout until `screensaver_activate_on_sleep=1` was set too (`tv.sh screensaver` does both).
+  `cmd dreams start-dreaming` needs root; to test, set `global stay_on_while_plugged_in 0` and
+  `system screen_off_timeout 15000`, wait, then restore both (emulator defaults: 1 and 2147483647).
+- **Wikimedia rate limits**: many parallel API calls from one IP get HTTP 429 ("too many requests");
+  batch titles (50 per `action=query`) and pause. Image downloads by the TV (one per minute) are fine.
 
 ## What NOT to touch
 

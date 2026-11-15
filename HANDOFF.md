@@ -47,6 +47,14 @@ Verified on the real Chromecast by the owner:
 
 ## Open items / next steps (most relevant first)
 
+0. **Paintings screensaver (2026-11-15, new)**: `ArtDream` + Home «Картины», 472 paintings with RU/EN
+   titles and child-friendly Russian stories (`assets/art/paintings.json`). Verified on the emulator
+   (gallery + the real dream via idle timeout, keys). **Not yet on the real TV**: needs a release and
+   `scripts/tv.sh screensaver` once; check Google TV actually runs a third-party dream there (if it
+   keeps showing Ambient mode, look at `settings get secure screensaver_components` after a reboot).
+   Gaps: no Hockney/Kusama/Lichtenstein/Lempicka/Deineka (no image ≥ 1000 px found); WikiArt images
+   (≈ 60 works) are smaller than Commons ones. Owner may want to drop borderline works (Raft of the
+   Medusa, Liberty Leading the People, Ophelia, Isle of the Dead).
 1. **Wishlist removal didn't stick** ("Brawn: The Impossible Formula 1 Story" came back after the
    owner removed it). It's fixed in `Repository.setWishlisted`: removal repeats until
    `bookmarks/get-item-folders` confirms, and every response is logged
