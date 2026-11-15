@@ -197,10 +197,12 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   clean → title block → story at 4 s → clean for the last 4 s; a 4 dp white bar along the bottom fills
   until the switch (restarts on ← →); the next painting is dealt and pre-loaded into Coil's cache so the
   switch lands on time; 2.5 s cross-fade. **Text never covers the painting if it can help it** (owner
-  2026-11-15): small caption (title 26 sp, story 15 sp), its height estimated from the text length
-  (`captionHeight`); the painting shrinks into the room left beside the caption (330 dp column) or above
-  it (bottom band), whichever keeps it bigger; only if both leave < 58 % of its full width does the
-  caption go over it on a scrim. Panoramas pan above a bottom band. ↑ ↓ hide the caption and the
+  2026-11-15): small caption (title 26 sp, story 15 sp), its height **measured** with a `TextMeasurer`
+  (`captionHeight`; an estimate from the length once cut a story off on the TV); the painting shrinks into
+  the room left of/right of the caption (330 dp column), or above/below it (full-width band). Any room
+  keeping the painting within 85 % of the best one is a candidate, picked at random per painting (owner
+  2026-11-15: not always the same arrangement); only if every room leaves < 58 % of its full width does
+  the caption go over it on a scrim. Panoramas pan above or below a band. ↑ ↓ hide the caption and the
   painting grows back to full size. Ken Burns 8 % at full size, 3 % beside a caption.
   Layout uses the **bitmap's** aspect, catalog `w`/`h` only pick the download size. Keys: ← → prev/next,
   ↑ ↓ caption, anything else wakes. `art:` log lines name each painting / failed image (skipped).
@@ -341,6 +343,9 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   emulator: the «неизвестные приложения» grant was back to "not allowed" after the first
   self-update (later updates kept it); the button handles it by reopening that screen.
 
+- **The screensaver stops with the TV and comes back by itself**: when the TV goes off (CEC) the
+  dongle sleeps and the dream ends; with the TV on and no input for `system screen_off_timeout`
+  (owner's TV: 600000 = 10 min) it starts again (seen 2026-11-15: `mWakefulness=Dreaming` with ArtDream).
 - **Screensaver on Google TV** (works on the owner's Chromecast, Android 14, verified 2026-11-15; Ambient
   mode there is `com.google.android.apps.tv.dreamx/.service.Backdrop`): the settings UI lists only Ambient mode; a third-party dream is picked
   with `settings put secure screensaver_components …`. On the emulator the device simply slept at the

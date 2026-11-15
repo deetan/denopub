@@ -13,6 +13,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.layout.layout
@@ -185,8 +188,8 @@ fun ArtShow(catalog: ArtCatalog, commands: Flow<ArtCommand>) {
     }
 }
 
-/** Where the caption goes: beside the painting, under it, or over it (when neither leaves it big enough). */
-private enum class Place { SIDE, BOTTOM, OVER }
+/** Where the caption goes: left/right of the painting, under/above it, or over it (when nothing else leaves it big). */
+private enum class Place { LEFT, RIGHT, BOTTOM, TOP, OVER }
 
 private class Rect(val x: Float, val y: Float, val w: Float, val h: Float) {
     fun lerp(o: Rect, t: Float) = Rect(x + (o.x - x) * t, y + (o.y - y) * t, w + (o.w - w) * t, h + (o.h - h) * t)
@@ -217,15 +220,21 @@ private fun artistLine(p: Painting) = buildString {
 
 private fun subLine(p: Painting) = listOf(p.artistEn, p.museumRu).filter { it.isNotBlank() }.joinToString("  ·  ")
 
-/** Rough height (dp) of the caption in a column [width] dp wide — enough to reserve room for it. */
-private fun captionHeight(p: Painting, width: Float): Float {
-    fun lines(text: String, sp: Float) =
-        if (text.isBlank()) 0 else kotlin.math.ceil(text.length * sp * 0.56f / width).toInt().coerceAtLeast(1)
-    var h = lines(p.titleRu, TITLE_SP) * TITLE_SP * 1.35f
-    if (p.titleEn.isNotBlank() && p.titleEn != p.titleRu) h += lines(p.titleEn, EN_SP) * EN_SP * 1.35f
-    h += 8f + lines(artistLine(p), ARTIST_SP) * ARTIST_SP * 1.35f + lines(subLine(p), SUB_SP) * SUB_SP * 1.35f
-    if (p.story.isNotBlank()) h += 10f + (lines(p.story, STORY_SP) + 1) * STORY_LINE
-    return h
+private val titleStyle = TextStyle(color = Color.White, fontSize = TITLE_SP.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Medium, shadow = Shadow(Color.Black.copy(alpha = 0.85f), blurRadius = 10f))
+private val enStyle = TextStyle(color = Color.White.copy(alpha = 0.72f), fontSize = EN_SP.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, shadow = titleStyle.shadow)
+private val artistStyle = TextStyle(color = Color.White, fontSize = ARTIST_SP.sp, shadow = titleStyle.shadow)
+private val subStyle = TextStyle(color = Color.White.copy(alpha = 0.65f), fontSize = SUB_SP.sp, shadow = titleStyle.shadow)
+private val storyStyle = TextStyle(color = Color.White.copy(alpha = 0.92f), fontSize = STORY_SP.sp, lineHeight = STORY_LINE.sp, shadow = titleStyle.shadow)
+
+/** Exact height (dp) of the caption laid out [width] dp wide — measured, so the room reserved fits it. */
+private fun captionHeight(p: Painting, width: Float, tm: TextMeasurer, density: Density): Float = with(density) {
+    val c = Constraints(maxWidth = width.dp.roundToPx())
+    fun h(text: String, style: TextStyle) = if (text.isBlank()) 0f else tm.measure(text, style, constraints = c).size.height.toDp().value
+    var total = h(p.titleRu, titleStyle)
+    if (p.titleEn.isNotBlank() && p.titleEn != p.titleRu) total += h(p.titleEn, enStyle)
+    total += 8f + h(artistLine(p), artistStyle) + h(subLine(p), subStyle)
+    if (p.story.isNotBlank()) total += 10f + h(p.story, storyStyle)
+    total + 4f
 }
 
 /** Positions a child at an absolute rect (dp), larger than the parent if need be. */
@@ -259,20 +268,32 @@ private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
         val m = 24f
         val fillsScreen = kotlin.math.abs(a / (W / H) - 1f) < 0.08f
         val full = if (fillsScreen) fit(a, 0f, 0f, W, H) else fit(a, m, m, W - 2 * m, H - 2 * m)
-        val sideText = captionHeight(p, SIDE_TEXT_W)
-        val bottomBand = captionHeight(p, W - 2 * TEXT_MARGIN) + 28f
+        val tm = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val sideText = remember(s.serial, W) { captionHeight(p, SIDE_TEXT_W, tm, density) }
+        val bottomBand = remember(s.serial, W) { captionHeight(p, W - 2 * TEXT_MARGIN, tm, density) } + 28f
         // The painting makes room for the caption: beside it or above it, whichever keeps it bigger;
         // if both would shrink it too much, the caption goes over it on a scrim.
         val sideX = TEXT_MARGIN + SIDE_TEXT_W + 32f
-        val side = if (sideText <= H - 80f) fit(a, sideX, m, W - sideX - 40f, H - 2 * m) else null
-        val bottom = fit(a, m, 16f, W - 2 * m, H - bottomBand - 24f)
+        val sideFits = sideText <= H - 56f
+        val rooms = buildMap {
+            if (sideFits) {
+                put(Place.LEFT, fit(a, sideX, m, W - sideX - 40f, H - 2 * m))      // text left, painting right
+                put(Place.RIGHT, fit(a, 40f, m, W - sideX - 40f, H - 2 * m))       // painting left, text right
+            }
+            put(Place.BOTTOM, fit(a, m, 16f, W - 2 * m, H - bottomBand - 24f))     // painting above the text
+            put(Place.TOP, fit(a, m, bottomBand + 8f, W - 2 * m, H - bottomBand - 24f))  // text above the painting
+        }
+        // Not always the same arrangement (owner 2026-11-15): any room that keeps the painting within
+        // 85 % of the best one is a candidate, picked at random per painting.
         val place = remember(s.serial, W, H) {
-            val best = maxOf(side?.w ?: 0f, bottom.w)
+            val best = rooms.values.maxOf { it.w }
+            val ok = rooms.filter { it.value.w >= 0.85f * best }.keys
+                .filter { !s.panorama || it == Place.BOTTOM || it == Place.TOP }
             when {
-                s.panorama -> Place.BOTTOM
-                best < 0.58f * full.w -> Place.OVER
-                side != null && side.w >= bottom.w -> Place.SIDE
-                else -> Place.BOTTOM
+                s.panorama && bottomBand < H * 0.5f -> if (rnd.nextBoolean()) Place.BOTTOM else Place.TOP
+                s.panorama || best < 0.58f * full.w || ok.isEmpty() -> Place.OVER
+                else -> ok.random(rnd)
             }
         }
         // ↑ ↓ hide the caption: the painting grows back to full size, smoothly.
@@ -289,15 +310,16 @@ private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
             // Full width of the scroll at the available height, panned from one end to the other.
             val h = H + ((H - bottomBand - 16f) - H) * t
             val w = h * a
+            val y = if (place == Place.TOP) (bottomBand + 16f) * t else 0f
             Image(
                 s.image, p.titleRu, contentScale = ContentScale.FillBounds,
-                modifier = Modifier.placeAt(Rect(-(w - W).coerceAtLeast(0f) * drift.value, 0f, w, h)),
+                modifier = Modifier.placeAt(Rect(-(w - W).coerceAtLeast(0f) * drift.value, y, w, h)),
             )
         } else {
             val ox = remember(s.serial) { 0.25f + rnd.nextFloat() * 0.5f }
             val oy = remember(s.serial) { 0.25f + rnd.nextFloat() * 0.5f }
             val zoomIn = remember(s.serial) { rnd.nextBoolean() }
-            val target = when (place) { Place.SIDE -> side!!; Place.BOTTOM -> bottom; Place.OVER -> full }
+            val target = rooms[place] ?: full
             Image(
                 s.image, p.titleRu, contentScale = ContentScale.FillBounds,
                 modifier = Modifier.placeAt(full.lerp(target, t)).graphicsLayer {
@@ -308,7 +330,9 @@ private fun SlideView(s: Slide, captionOn: Boolean, onPhase: (Int) -> Unit) {
             )
         }
         when (place) {
-            Place.SIDE -> Caption(p, phase, captionOn, place, Modifier.align(Alignment.CenterStart).padding(start = TEXT_MARGIN.dp).width(SIDE_TEXT_W.dp))
+            Place.LEFT -> Caption(p, phase, captionOn, place, Modifier.align(Alignment.CenterStart).padding(start = TEXT_MARGIN.dp).width(SIDE_TEXT_W.dp))
+            Place.RIGHT -> Caption(p, phase, captionOn, place, Modifier.align(Alignment.CenterEnd).padding(end = TEXT_MARGIN.dp).width(SIDE_TEXT_W.dp))
+            Place.TOP -> Caption(p, phase, captionOn, place, Modifier.align(Alignment.TopStart))
             else -> Caption(p, phase, captionOn, place, Modifier.align(Alignment.BottomStart))
         }
     }
@@ -327,25 +351,28 @@ private fun Caption(p: Painting, phase: Int, on: Boolean, place: Place, modifier
         // Over the picture a scrim keeps it readable; beside or under it the dimmed backdrop is enough.
         Box(
             when (place) {
-                Place.SIDE -> Modifier
-                Place.BOTTOM -> Modifier.fillMaxWidth()
+                Place.LEFT, Place.RIGHT -> Modifier
+                Place.BOTTOM, Place.TOP -> Modifier.fillMaxWidth()
                 Place.OVER -> Modifier.fillMaxWidth().background(
                     Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color.Black.copy(alpha = 0.5f), 1f to Color.Black.copy(alpha = 0.8f)),
                 )
             },
         ) {
             Column(
-                if (place == Place.SIDE) Modifier
-                else Modifier.padding(start = TEXT_MARGIN.dp, end = TEXT_MARGIN.dp, top = if (place == Place.OVER) 64.dp else 0.dp, bottom = 22.dp),
+                when (place) {
+                    Place.LEFT, Place.RIGHT -> Modifier
+                    Place.TOP -> Modifier.padding(start = TEXT_MARGIN.dp, end = TEXT_MARGIN.dp, top = 22.dp)
+                    else -> Modifier.padding(start = TEXT_MARGIN.dp, end = TEXT_MARGIN.dp, top = if (place == Place.OVER) 64.dp else 0.dp, bottom = 22.dp)
+                },
             ) {
-                BasicText(p.titleRu, style = TextStyle(color = Color.White, fontSize = TITLE_SP.sp, fontFamily = serif, fontWeight = FontWeight.Medium, shadow = shadow))
+                BasicText(p.titleRu, style = titleStyle)
                 if (p.titleEn.isNotBlank() && p.titleEn != p.titleRu) {
-                    BasicText(p.titleEn, style = TextStyle(color = Color.White.copy(alpha = 0.72f), fontSize = EN_SP.sp, fontFamily = serif, fontStyle = FontStyle.Italic, shadow = shadow))
+                    BasicText(p.titleEn, style = enStyle)
                 }
                 Spacer(Modifier.height(8.dp))
-                BasicText(artistLine(p), style = TextStyle(color = Color.White, fontSize = ARTIST_SP.sp, shadow = shadow))
+                BasicText(artistLine(p), style = artistStyle)
                 val sub = subLine(p)
-                if (sub.isNotBlank()) BasicText(sub, style = TextStyle(color = Color.White.copy(alpha = 0.65f), fontSize = SUB_SP.sp, shadow = shadow))
+                if (sub.isNotBlank()) BasicText(sub, style = subStyle)
                 AnimatedVisibility(
                     visible = phase >= 2 && p.story.isNotBlank(),
                     enter = fadeIn(tween(1200)) + expandVertically(tween(1000)),
@@ -353,7 +380,7 @@ private fun Caption(p: Painting, phase: Int, on: Boolean, place: Place, modifier
                 ) {
                     BasicText(
                         p.story, Modifier.padding(top = 10.dp),
-                        style = TextStyle(color = Color.White.copy(alpha = 0.92f), fontSize = STORY_SP.sp, lineHeight = STORY_LINE.sp, shadow = shadow),
+                        style = storyStyle,
                     )
                 }
             }
