@@ -42,7 +42,9 @@ export function commonsThumb(file: string, width: number, fullWidth: number): st
 }
 
 function paintingImage(p: Painting): string | null {
-  if (p.commons) return commonsThumb(p.commons, 640, p.w);
+  // Wikimedia serves only standard thumbnail widths (…, 330, 500, 960, 1280, …): 640 gave HTTP 400,
+  // and the home bar silently drops a tile whose image fails.
+  if (p.commons) return commonsThumb(p.commons, 500, p.w);
   return p.url || null;
 }
 
