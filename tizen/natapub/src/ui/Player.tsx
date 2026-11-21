@@ -5,6 +5,8 @@ import { Hold, KEY, Press, useKeys } from '../keys';
 import type { KeyEv } from '../keys';
 import { log } from '../log';
 import { setScreenSaver } from '../platform';
+import { segText } from '../api/skip';
+import type { Segment } from '../api/skip';
 import { PlayerController } from '../player/controller';
 import type { EpisodeCard, PlayerUi, TrackOption } from '../player/controller';
 import type { Nav } from './App';
@@ -92,6 +94,8 @@ export function Player({ nav, start }: { nav: Nav; start: ResumeTarget }) {
   const hold = useRef(new Hold()).current;
   const jump = useRef({ steps: 0, forward: true, at: 0, origin: 0 }).current;
   const fineResume = useRef(false);
+  const [skipVisible, setSkipVisible] = useState(false);
+  const skipShown = useRef(''); // the segment already offered, until playback leaves it
   const timers = useRef<Record<string, number>>({}).current;
 
   useEffect(() => {
@@ -224,6 +228,31 @@ export function Player({ nav, start }: { nav: Nav; start: ResumeTarget }) {
     seekTo(v.currentTime * 1000 + (forward ? step : -step));
   }
 
+  // Skip button: shown for a few seconds when playback enters a known intro / recap / credits
+  // stretch, then gone (OK goes back to pause). Seeking back into it brings it back.
+  const segs = ui ? ui.segments : [];
+  const active: Segment | null = segs.filter((s) => pos >= s.startMs && pos < (s.endMs == null ? dur : s.endMs) - 2000)[0] || null;
+  const activeKey = active ? segText(active) : '';
+  const bare = overlay === 'none';
+  useEffect(() => {
+    clearTimeout(timers.skip);
+    if (!active) {
+      skipShown.current = '';
+      setSkipVisible(false);
+      return;
+    }
+    // The window only runs with nothing else on screen (the player opens with the OSD up).
+    if (!bare || skipShown.current === activeKey) return;
+    setSkipVisible(true);
+    later('skip', active.kind === 'credits' ? 10000 : 8000, () => {
+      setSkipVisible(false);
+      skipShown.current = activeKey;
+    });
+  }, [activeKey, bare]);
+  const canSkip = skipVisible && !!active && bare && !(ui && ui.error);
+  const skipLabel = !active ? '' : active.kind === 'recap' ? S.skipRecap : active.kind === 'intro' ? S.skipIntro
+    : c && c.creditsLeadToNext(active) ? S.skipToNext : S.skipCredits;
+
   const arrows = (code: number) => code === KEY.LEFT || code === KEY.RIGHT;
   const isOk = (code: number) => code === KEY.OK;
 
@@ -283,7 +312,11 @@ export function Player({ nav, start }: { nav: Nav; start: ResumeTarget }) {
       if (e.code === KEY.UP) enterFine();
       else if (e.code === KEY.DOWN) setOverlay('osd');
       else if (arrows(e.code)) hold.handle(e, (code) => quickSeek(code === KEY.RIGHT), 400, 220);
-      else if (isOk(e.code)) togglePause(); // just pause/resume: the sign is enough
+      else if (isOk(e.code) && canSkip && active) {
+        log('skip: OK on', segText(active));
+        setSkipVisible(false);
+        c.skip(active);
+      } else if (isOk(e.code)) togglePause(); // just pause/resume: the sign is enough
     }
     return true;
   });
@@ -298,6 +331,10 @@ export function Player({ nav, start }: { nav: Nav; start: ResumeTarget }) {
       <div class={'jumpbar fade' + (jumpVisible && overlay === 'none' ? ' show' : '')}>
         <div class="t-title" style={{ color: 'var(--accent)', marginBottom: '8px' }}>{jumpLabel(jumpTotal)}</div>
         <SeekBar pos={pos} dur={dur} scrub={null} emphasized={false} />
+      </div>
+      <div class={'skipbtn fade' + (canSkip ? ' show' : '')}>
+        <span class="t-title">{skipLabel}</span>
+        <span class="ok t-label">OK</span>
       </div>
       {err ? <div class="err t-body">{S.playbackError(err)}</div> : null}
       <div class={'topbar' + (overlay === 'fine' && fineBar ? ' show' : '')}>

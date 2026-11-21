@@ -9,6 +9,8 @@ import type { TrackChoice } from '../data/prefs';
 import * as repo from '../data/repo';
 import type { ResumeTarget } from '../data/repo';
 import { log } from '../log';
+import { segmentsFor, segText } from '../api/skip';
+import type { Segment } from '../api/skip';
 import { S } from '../ui/strings';
 import { displayTitle } from '../format';
 
@@ -37,9 +39,15 @@ export interface PlayerUi {
   next: EpisodeCard | null;
   episodes: EpisodeCard[];
   error: string | null;
+  /** Skippable intro / recap / credits of the current episode (empty until known, or unknown). */
+  segments: Segment[];
 }
 
-const EMPTY: PlayerUi = { title: '', episodeLabel: null, audio: [], subtitles: [], qualities: [], prev: null, next: null, episodes: [], error: null };
+const EMPTY: PlayerUi = { title: '', episodeLabel: null, audio: [], subtitles: [], qualities: [], prev: null, next: null, episodes: [], error: null, segments: [] };
+
+/** A short title card isn't worth a button. */
+const MIN_OPENING_MS = 20000;
+const MIN_CREDITS_MS = 15000;
 
 /** "ENG #12", "RUS #04 Forced" → "ENG", "RUS FORCED". */
 export function subtitleName(raw: string): string {
@@ -96,6 +104,7 @@ export class PlayerController {
   // Between load() and the first 'playing' of the new file: currentTime still belongs to the old
   // one (or is 0), so no progress write may happen.
   private switching = true;
+  private segmentsFor = '';
   ended = false;
 
   constructor(private video: HTMLVideoElement, start: ResumeTarget, private onUi: (ui: PlayerUi) => void) {
@@ -206,7 +215,59 @@ export class PlayerController {
       next: at >= 0 && at + 1 < cards.length ? cards[at + 1] : null,
       episodes: cards,
       error: null,
+      segments: [],
     });
+    this.loadSegments(it, target, v);
+  }
+
+  private loadSegments(it: Item, target: ResumeTarget, v: Video): void {
+    const key = it.id + ':' + target.season + ':' + target.episode;
+    this.segmentsFor = key;
+    if (!it.imdb) return;
+    // Movies: only single-part ones (the databases know the film, not kino.pub's parts).
+    if (target.season == null && (it.videos || []).length > 1) return;
+    segmentsFor(it.imdb, target.season, target.season != null ? target.episode : null, v.duration).then((all) => {
+      if (this.destroyed || this.segmentsFor !== key) return;
+      const durMs = v.duration * 1000;
+      const usable = all.filter((s) => ((s.endMs == null ? durMs : s.endMs) - s.startMs) >= (s.kind === 'credits' ? MIN_CREDITS_MS : MIN_OPENING_MS));
+      if (usable.length) log('skip: buttons for', usable.map(segText).join(', '));
+      this.setUi({ segments: usable });
+    });
+  }
+
+  private durMs(): number {
+    const d = this.video.duration;
+    return d > 0 && isFinite(d) ? d * 1000 : 0;
+  }
+
+  // A post-credits scene: the credits end well before the file does (IntroDB's outro end is
+  // usually the file's end to the second; 30 s of slack for other releases).
+  private hasSceneAfter(s: Segment): boolean {
+    const dur = this.durMs();
+    return s.endMs != null && dur > 0 && s.endMs < dur - 30000;
+  }
+
+  /** True when skipping these credits ends the episode and starts the next one. */
+  creditsLeadToNext(s: Segment): boolean {
+    const it = this.item;
+    return !!it && !this.hasSceneAfter(s) && !!repo.nextOf(it, this.current.season, this.current.episode);
+  }
+
+  /** OK on the skip button. */
+  skip(s: Segment): void {
+    const v = this.video;
+    if (s.kind !== 'credits') {
+      if (s.endMs != null) v.currentTime = s.endMs / 1000;
+    } else if (this.hasSceneAfter(s)) {
+      v.currentTime = (s.endMs as number) / 1000;
+    } else if (this.creditsLeadToNext(s)) {
+      // Same as playing to the end: watched, then the next episode.
+      this.onEnded();
+    } else {
+      // A movie / the last episode: the end of the file ('ended' marks it watched).
+      const dur = this.durMs();
+      if (dur > 0) v.currentTime = Math.max(0, dur / 1000 - 0.25);
+    }
   }
 
   /** Stay at the chosen quality (the mixed manifest lists every one; levels come lowest first). */
@@ -323,11 +384,13 @@ export class PlayerController {
     prefs.markPlayed(it.id); // keeps "last watched" right even when kino.pub history lags
   }
 
-  /** Inside the last 5 % / last minute (credits databases are out of scope here). */
+  /** Inside the episode's known credits, or (unknown credits) in its last 5 % / last minute. */
   private inCredits(): boolean {
     const dur = this.video.duration;
     if (!(dur > 0)) return false;
     const pos = this.video.currentTime;
+    const credits = this.ui.segments.filter((s) => s.kind === 'credits')[0];
+    if (credits && pos * 1000 >= credits.startMs) return true;
     return pos >= dur * 0.95 || dur - pos <= 60;
   }
 
