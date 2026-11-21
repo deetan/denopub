@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { authLost, tokens } from '../api/kinopub';
+import { ArtShow } from '../art/ArtShow';
+import { lastKey, touchIdle } from '../keys';
 import type { ResumeTarget } from '../data/repo';
 import { log } from '../log';
 import { Auth } from './Auth';
@@ -7,6 +9,18 @@ import { Details } from './Details';
 import { Home } from './Home';
 import { Player } from './Player';
 import { Search } from './Search';
+
+/**
+ * Paintings after 3 minutes without a key press while nothing plays (owner 2026-11-21: a Tizen
+ * web app can't be the system screensaver, so it runs inside Natapub). Desktop dev: `?idle=10`.
+ */
+const IDLE_MS = (() => {
+  const m = import.meta.env.DEV ? /[?&]idle=(\d+)/.exec(location.search) : null;
+  return m ? Number(m[1]) * 1000 : 3 * 60000;
+})();
+
+/** Desktop `?stay`: keep the paintings when the tab is hidden (screenshot tools hide it). */
+const STAY = import.meta.env.DEV && /[?&]stay/.test(location.search);
 
 export type Route = { k: 'home' } | { k: 'search' } | { k: 'details'; id: number } | { k: 'player'; target: ResumeTarget };
 
@@ -33,6 +47,34 @@ export function App() {
     };
   }, []);
 
+  const top = stack[stack.length - 1];
+  const [art, setArt] = useState(false);
+  const artOn = useRef(false);
+  artOn.current = art;
+  const idleAllowed = loggedIn && top.k !== 'player';
+  useEffect(() => {
+    if (!idleAllowed) {
+      setArt(false);
+      return undefined;
+    }
+    const t = window.setInterval(() => {
+      if (!artOn.current && !document.hidden && Date.now() - lastKey() >= IDLE_MS) {
+        log('art: idle', Math.round(IDLE_MS / 1000), 's on', top.k, '-> paintings');
+        setArt(true);
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [idleAllowed, top.k]);
+  useEffect(() => {
+    // TV off / app in the background: no paintings, and the idle clock starts again on return.
+    const vis = () => {
+      touchIdle();
+      if (document.hidden && !STAY) setArt(false);
+    };
+    document.addEventListener('visibilitychange', vis);
+    return () => document.removeEventListener('visibilitychange', vis);
+  }, []);
+
   if (!loggedIn) return <Auth onDone={() => setLoggedIn(true)} />;
 
   const nav: Nav = {
@@ -56,6 +98,15 @@ export function App() {
           </div>
         );
       })}
+      {art ? (
+        <ArtShow
+          onWake={(code) => {
+            log('art: woken by key', code);
+            touchIdle();
+            setArt(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

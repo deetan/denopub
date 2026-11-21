@@ -19,6 +19,53 @@ export type KeyHandler = (e: KeyEv) => boolean | void;
 const stack: { h: { current: KeyHandler } }[] = [];
 const isDown: Record<number, boolean> = {};
 
+// ---------- idle tracking and the full-screen overlay (paintings screensaver) ----------
+
+let lastKeyAt = Date.now();
+let overlay: KeyHandler | null = null;
+let swallow = 0; // the key that woke the overlay: its keyup (and repeats) must not reach the screen
+let swallowUntil = 0;
+
+/** When the last key went down (any key, typing included). */
+export function lastKey(): number {
+  return lastKeyAt;
+}
+
+/** Restarts the idle clock (e.g. when the app comes back to the foreground). */
+export function touchIdle(): void {
+  lastKeyAt = Date.now();
+}
+
+/**
+ * While set, every key goes to [h] first, before the screens and before a focused text field.
+ * Clearing it with [wakeCode] swallows the rest of that key press (its keyup), so the key that
+ * dismissed the overlay does nothing on the screen underneath.
+ */
+export function setOverlay(h: KeyHandler | null, wakeCode = 0): void {
+  overlay = h;
+  if (!h && wakeCode) {
+    swallow = wakeCode;
+    swallowUntil = Date.now() + 2000;
+  }
+}
+
+function overlayTakes(ev: KeyboardEvent, down: boolean): boolean {
+  const code = ev.keyCode;
+  if (swallow && (code !== swallow || Date.now() > swallowUntil)) swallow = 0;
+  if (swallow) {
+    isDown[code] = down;
+    if (!down) swallow = 0;
+    ev.preventDefault();
+    return true;
+  }
+  if (!overlay) return false;
+  const repeat = down && !!isDown[code];
+  isDown[code] = down;
+  overlay({ code, down, repeat, back: isBack(code) });
+  ev.preventDefault();
+  return true;
+}
+
 export function initKeys(): void {
   const handled = [KEY.LEFT, KEY.UP, KEY.RIGHT, KEY.DOWN, KEY.OK, KEY.BACK, KEY.BACKSPACE, KEY.SPACE];
   // While a text field has DOM focus (the IME is up) it keeps its typing keys: only the keys that
@@ -30,6 +77,8 @@ export function initKeys(): void {
   const fieldKeys = [KEY.UP, KEY.DOWN, KEY.OK, KEY.BACK, KEY.ESC, KEY.IME_DONE, KEY.IME_CANCEL];
   document.addEventListener('keydown', (ev) => {
     const code = ev.keyCode;
+    lastKeyAt = Date.now();
+    if (overlayTakes(ev, true)) return;
     if (inField(ev)) {
       if (fieldKeys.indexOf(code) < 0) return;
       isDown[code] = true;
@@ -44,6 +93,7 @@ export function initKeys(): void {
   });
   document.addEventListener('keyup', (ev) => {
     const code = ev.keyCode;
+    if (overlayTakes(ev, false)) return;
     if (inField(ev) && fieldKeys.indexOf(code) < 0) return;
     isDown[code] = false;
     dispatch({ code, down: false, repeat: false, back: isBack(code) });

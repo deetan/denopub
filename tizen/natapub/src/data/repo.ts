@@ -263,6 +263,7 @@ function resumeEntry(item: Item, info: WatchingInfo, newEpisodes: number, explic
 // ---------- wishlist = a kino.pub bookmark folder ----------
 
 let wishlistFolderId: number | null = null;
+let wishlistFolderInfo = '';
 
 async function wishlistFolder(): Promise<number> {
   if (wishlistFolderId != null) return wishlistFolderId;
@@ -274,13 +275,16 @@ async function wishlistFolder(): Promise<number> {
     id = created ? created.id : (await kp.bookmarkFolders()).filter((f) => f.title === WISHLIST_TITLE)[0].id;
   }
   wishlistFolderId = id;
-  log('wishlist: folder', id, found ? '"' + found.title + '"' : '(created)', 'of', folders.length, 'folders');
+  // Same matching as Android; the account may simply have no such folder yet (then it is created).
+  wishlistFolderInfo = (found ? '"' + found.title + '" count ' + (found.count != null ? found.count : '?') : '(created)') +
+    '; all folders: ' + folders.map((f) => '"' + f.title + '" ' + (f.count != null ? f.count : '?')).join(', ');
   return id;
 }
 
 export async function wishlist(): Promise<WishlistEntry[]> {
-  const items = await kp.bookmarkItems(await wishlistFolder());
-  log('wishlist:', items.length, 'items');
+  const folder = await wishlistFolder();
+  const items = await kp.bookmarkItems(folder);
+  log('wishlist: folder', folder, wishlistFolderInfo, '-> returned', items.length, 'items');
   const seen = prefs.seenWishlist();
   return items.map((item) => ({ item, isNew: seen.indexOf(item.id) < 0 }));
 }

@@ -60,7 +60,11 @@ export function exitApp(): void {
 export function setScreenSaver(on: boolean): void {
   try {
     const ac = webapis.appcommon;
-    ac.setScreenSaver(on ? ac.AppCommonScreenSaverState.SCREEN_SAVER_ON : ac.AppCommonScreenSaverState.SCREEN_SAVER_OFF);
+    ac.setScreenSaver(
+      on ? ac.AppCommonScreenSaverState.SCREEN_SAVER_ON : ac.AppCommonScreenSaverState.SCREEN_SAVER_OFF,
+      () => log('tv screensaver', on ? 'on' : 'off'),
+      (err: { message?: string }) => log('setScreenSaver', on, 'error', err && err.message),
+    );
   } catch (e) {
     if (isTizen) log('setScreenSaver', on, 'failed', (e as Error).message);
   }

@@ -124,4 +124,22 @@ export const S = {
   min: (n: number) => n + ' min',
   minSec: (m: number, s: number) => m + ' min ' + s + ' s',
   halfSec: '0.5 s',
+
+  // Paintings screensaver: weather band (src/art). Must fit one 1080p row with the clock.
+  wxNow: 'Now',
+  // Tomorrow's first cell is labelled with the weekday ("Sun morning"): "Tomorrow morning" overflowed.
+  wxDay: (d: number, part: string) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d] + ' ' + part,
+  wxMorning: 'morning',
+  wxAfternoon: 'afternoon',
+  wxEvening: 'evening',
+  wxWind: (speed: string, dir: string) => '💨 ' + speed + ' m/s' + (dir ? ' ' + dir : ''),
+  wxMm: (mm: number) => (mm >= 10 ? Math.round(mm) : mm.toFixed(1)) + ' mm',
+  wxRain: (pct: number) => '☔' + Math.round(pct) + '%',
+  wxHumidity: (pct: number) => '💧' + Math.round(pct) + '%',
+  aqiGood: 'good',
+  aqiModerate: 'moderate',
+  aqiSensitive: 'sensitive',
+  aqiUnhealthy: 'unhealthy',
+  aqiVeryUnhealthy: 'very unhealthy',
+  aqiHazardous: 'hazardous',
 };

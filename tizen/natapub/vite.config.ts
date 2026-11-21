@@ -45,6 +45,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/kw/, ''),
       },
+      // Sensor.Community sends no CORS headers (the TV app doesn't need them).
+      '/sc': {
+        target: 'https://data.sensor.community',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/sc/, ''),
+      },
     },
   },
 });

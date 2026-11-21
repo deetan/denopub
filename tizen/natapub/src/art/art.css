@@ -1,0 +1,62 @@
+/* Paintings screensaver (ArtShow.tsx). Sizes in dp like the rest of #app (960×540, zoomed).
+   Only transform and opacity are ever transitioned. Chromium 63: margins, no flex gap. */
+@font-face { font-family: 'Noto Serif'; font-weight: 500; src: url(../../node_modules/@fontsource/noto-serif/files/noto-serif-latin-500-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Noto Serif'; font-weight: 500; src: url(../../node_modules/@fontsource/noto-serif/files/noto-serif-latin-ext-500-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+/* Artist names carry Polish / Czech / Turkish letters. */
+@font-face { font-family: 'Roboto'; font-weight: 400; src: url(../../node_modules/@fontsource/roboto/files/roboto-latin-ext-400-normal.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+.art { position: absolute; left: 0; top: 0; width: 960px; height: 540px; overflow: hidden; background: #000; z-index: 50; }
+.art-stage, .art-slide { position: absolute; left: 0; top: 0; width: 960px; height: 540px; overflow: hidden; }
+.art-slide { opacity: 0; transition: opacity 2500ms ease-in-out; will-change: opacity; }
+/* Tiny canvas copy stretched over the screen = the blurred backdrop. */
+.art-back { position: absolute; left: -48px; top: -27px; width: 1056px; height: 594px; opacity: 0.8; }
+.art-dim { position: absolute; left: 0; top: 0; width: 960px; height: 540px; background: rgba(0, 0, 0, 0.4); }
+.art-area { position: absolute; left: 0; top: 58px; width: 960px; height: 482px; }
+.art-room { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.art-drift { position: absolute; left: 0; top: 0; width: 100%; height: 100%; will-change: transform; }
+.art-pan { position: absolute; left: 0; top: 0; will-change: transform; }
+.art-img { display: block; width: 100%; height: 100%; }
+
+.art-cap { position: absolute; opacity: 0; transform: translateY(12px); transition: opacity 1200ms ease, transform 1000ms ease; }
+.art-cap.on { opacity: 1; transform: translateY(0); transition: opacity 1000ms ease, transform 1000ms ease; }
+.art-cap-left { left: 56px; width: 330px; }
+.art-cap-right { right: 56px; width: 330px; }
+.art-cap-top { left: 0; top: 0; width: 960px; padding: 22px 56px 0 56px; }
+.art-cap-bottom { left: 0; bottom: 0; width: 960px; padding: 0 56px 22px 56px; }
+.art-cap-over { left: 0; bottom: 0; width: 960px; padding: 64px 56px 22px 56px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.5) 30%, rgba(0, 0, 0, 0.8) 100%); }
+
+.art-capc { color: #fff; text-shadow: 0 0 5px rgba(0, 0, 0, 0.85); }
+.art-title { font-family: 'Noto Serif', Georgia, 'Times New Roman', serif; font-size: 26px; line-height: 32px; font-weight: 500; }
+.art-artist { font-size: 15px; line-height: 20px; margin-top: 8px; }
+.art-sub { font-size: 13px; line-height: 18px; color: rgba(255, 255, 255, 0.65); }
+.art-story { font-size: 15px; line-height: 22px; margin-top: 10px; color: rgba(255, 255, 255, 0.92);
+  opacity: 0; transition: opacity 800ms ease; }
+.art-cap.story .art-story { opacity: 1; transition: opacity 1200ms ease; }
+
+/* Off-screen copy for measuring captions; .art-ref is exactly 100 dp tall. */
+.art-measure { position: absolute; left: 0; top: 0; visibility: hidden; }
+.art-measure .art-capc { position: absolute; left: 0; top: 0; }
+.art-ref { position: absolute; left: 0; top: 0; width: 1px; height: 100px; }
+
+.art-bar { position: absolute; left: 0; bottom: 0; width: 960px; height: 4px; background: rgba(255, 255, 255, 0.55);
+  transform-origin: 0 0; transform: scaleX(0); will-change: transform; }
+
+/* Clock + weather band. Exactly one 1080p row wide: adding a cell means removing one. */
+.wx { position: absolute; left: 0; top: 0; width: 960px; height: 58px; padding: 8px 20px 0 40px; overflow: hidden;
+  display: flex; flex-direction: row; align-items: center; white-space: nowrap; color: #fff;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0)); text-shadow: 0 0 4px #000; }
+.wx-clock { font-size: 30px; font-weight: 300; color: rgba(255, 255, 255, 0.85); margin-right: 14px; }
+.wx-cell { margin-right: 10px; }
+.wx-label { font-size: 11px; color: rgba(255, 255, 255, 0.6); }
+.wx-row { display: flex; flex-direction: row; align-items: center; font-size: 15px; }
+.wx-row.big { font-size: 19px; }
+.wx-ico { margin-right: 3px; }
+.wx-t { margin-right: 3px; }
+.wx-rain { font-size: 10px; line-height: 12px; color: rgba(255, 255, 255, 0.8); margin-left: 1px; }
+.wx-hum { margin-left: 8px; }
+.wx-small { font-size: 11px; color: rgba(255, 255, 255, 0.75); }
+.wx-air { margin-right: 10px; }
+.wx-dot { display: inline-block; width: 7px; height: 7px; border-radius: 4px; margin-right: 4px; vertical-align: 0; }
+.wx-sep { width: 1px; height: 34px; background: rgba(255, 255, 255, 0.3); margin: 0 10px 0 2px; }
+.wx-place { margin-left: 6px; }
+.wx.tight1 .wx-pm, .wx.tight2 .wx-pm, .wx.tight2 .wx-mm { display: none; }

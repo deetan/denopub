@@ -18,3 +18,4 @@ tizen/**/node_modules/
 tizen/**/dist/
 .buildResult/
 .sign/
+tizen/natapub/public/paintings.json

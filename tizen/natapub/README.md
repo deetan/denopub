@@ -39,7 +39,12 @@ src/
   ui/Player.tsx       overlays (quick jump, OSD, fine mode, tracks panel)
   ui/common.tsx       cards, rows (lazy FixedRow, measured ChipRow), ActionMenu, toast, vertical scroll
   ui/app.css          tokens and shapes from Theme.kt / Cards.kt
+  art/painting.ts     catalog entry, English caption fields (Russian dates → "c. 1305", "17th century BC")
+  art/catalog.ts      Art.kt: bundled public/paintings.json, daily GitHub refresh, persisted shuffled deck
+  art/weather.ts      Weather.kt: Open-Meteo, Sensor.Community AQI, ipwho.is, localStorage cache
+  art/ArtShow.tsx     ArtShow.kt: slides, caption layout, Ken Burns / pan, weather band, frame timing
   dev/fixture.ts      desktop-only fake kino.pub (never in the TV build)
+scripts/paintings.mjs   builds public/paintings.json (git-ignored) from the Android asset; fails on Cyrillic
 public/               config.xml, icon.png (own icon, drawn by scripts/make-icon.py), hls.min.js (the spike's exact 1.5.20 build)
 scripts/check-dist.mjs  fails the build on syntax/APIs/CSS newer than Chrome 63
 ```
@@ -69,6 +74,10 @@ cd tizen/natapub
 npm install
 npm run dev                # http://localhost:5173 — real kino.pub via the Vite proxy (/kw → kino.watch)
                            # http://localhost:5173/?fixture — fake data, in-memory writes, a public test stream
+                           # add &idle=10 — paintings after 10 s idle (dev only; the TV always waits 3 min)
+                           # add &story — a sample English story on every painting (layout check)
+                           # add &wxworst — the widest weather band (−14°, 100 %, mm, gusts, AQI 288, a place)
+                           # add &stay — keep the paintings when the tab is hidden (screenshot tools hide it)
 npm run build              # typecheck + build + Chrome 63 check → dist/
 ```
 
@@ -117,12 +126,52 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
   default), re-applied on every episode. `marktime` every 30 s, on pause and on exit, serialized;
   watched at the end or when switching episodes in the last 5 % / last minute; auto-advance across
   seasons. TV screensaver off while the player is open.
+- **Paintings screensaver** (Android `ArtShow` / `Art.kt` / `Weather.kt`, see the root `CLAUDE.md`).
+  A Tizen web app can't be the system screensaver, so it runs **inside Natapub**: after 3 minutes
+  without a key press on any screen except the player and the login screen (`App.tsx`, `IDLE_MS`)
+  an overlay covers the app; the screens stay mounted under it, so any key returns exactly where
+  you were (same screen, same focused card). ← → previous/next painting, ↑ ↓ caption on/off, any
+  other key wakes; the waking key is swallowed until its keyup (`keys.ts` `setOverlay`), also
+  when the Search field had DOM focus. The TV's own screensaver is off while the paintings (or the
+  player) are up and back on otherwise. App hidden / TV off → overlay closes, idle clock restarts.
+  Timing: **30 s per painting** (`SLIDE_MS`, owner 2026-11-21; Android stays at 40 s), caption at 2 s,
+  story at 4 s, clean for the last 4 s,
+  2.5 s cross-fade, 4 dp progress bar, next image downloaded while the current one shows. Layout:
+  caption heights measured in the DOM (against a 100 dp reference, so `zoom` cancels out), rooms
+  left / right / above / below with the 85 % / 58 % rules and a random pick; panoramas pan; Ken
+  Burns 8 % / 3 %. Weather band: clock, Now (+ ☔ rain chance, wind speed–gusts with arrow, 💧 humidity, US AQI from
+  Sensor.Community within 3 km, trimmed mean, humidity-corrected, CAMS fallback), +3 h, +6 h,
+  tomorrow morning (labelled with the weekday, "Sun morning") / afternoon / evening. Every cell shows the rain
+  chance (☔ 40%) and, when ≥ 0.1, the amount in mm, stacked to the right of the temperature. The
+  band must stay one 1080p row: `art: weather band <right edge> of 940 dp, slack N` is logged on
+  every show; if it is too wide it drops the PM2.5 figure, then the mm (`tight1` / `tight2`). Home is **`HOME` in `src/art/weather.ts` = New Belgrade,
+  Ledine / Block 44 (44.80, 20.38)** — the Samsung TV is not where the Chromecast is, so not
+  Android's Palilula; rounded to ~1 km on purpose (public repo). Sensors within 3 km of it;
+  ipwho.is (once a day) replaces it only when the IP is more than 30 km away. The caches are
+  `natapub.weather.v2` / `.loc.v2` (v1 still held Palilula for a day after the move); the
+  `weather:` line logs the coordinates used. New Belgrade has ~1 outdoor sensor within 3 km, so
+  the AQI there usually comes from the CAMS model.
+  Log lines `art:` (painting, image size, load / decode / first-frame ms, one frame-timing line per
+  painting) and `weather:`.
+  **English only, never Russian** (owner 2026-11-21): titleEn, artistEn + artistLife, date,
+  museumEn, and the story from the catalog's **`storyEn`** field (an English story for a child,
+  200–900 characters, in every entry of `paintings.json`; an entry without it shows only the title
+  block). The daily GitHub copy replaces the bundled one only if it has at least as many paintings
+  **and** at least as many `storyEn` stories, so a remote file older than the bundle never wins. The catalog's `date` / `artistLife` are
+  Russian and are translated by `englishDate()`; any field that still holds Cyrillic is dropped,
+  and `npm run build` fails if a date or life span would be lost that way.
 
 ## Not ported / differs from Android
 
 - Out of scope: Sport row (and its live preview), recommendations, IMDb (rating, English plot,
   trailers, "More like this" — IMDb answers 403 to the TV), kino.pub trailers, skip intro/credits,
-  paintings screensaver and weather, self-update (no Paintings button).
+  self-update, the Home «Paintings» button (paintings only come as the in-app screensaver).
+- Paintings: no CSS blur (far too slow here) — the backdrop is a 32×18 canvas copy of the painting
+  stretched over the screen. The story's room is reserved from the first second (it fades in at
+  4 s instead of expanding the caption, an animation of height). After ↑ ↓ the drift is re-aimed
+  rather than continued on the same curve. Ken Burns turns itself off for the session after two
+  paintings in a row with drift frame p95 > 40 ms. No custom User-Agent for Commons (a browser
+  can't set one). Titles use a bundled Noto Serif (Android: the system serif).
 - Device settings: only hls4 + SSL are requested; **HEVC / 4K / HDR stay off** because only H.264
   ≤ 1080p was proven through hls.js on this TV. Turning them on is a kino.pub device setting plus a
   playback test.
@@ -132,6 +181,23 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
 - Tizen has no "Background" coroutine context: the background lane is an explicit flag.
 
 ## Gotchas
+
+- The TV doesn't trust Let's Encrypt's newer ECDSA chain (YE1) that data.sensor.community
+  serves (XHR "network error"); the sensor query falls back to plain http on the TV.
+- Paintings: `public/paintings.json` is generated (git-ignored) — run `npm run dev`/`build`, not
+  bare `vite`. The daily GitHub refresh is slimmed to the English fields (~230 KB) before it goes
+  to localStorage; a quota error drops it rather than touching the token or the Home cache.
+- Chromium 63 has no `img.decode()`: a new painting is put in the DOM at opacity 0 and the fade
+  starts two frames later; drawing its backdrop canvas decodes the bitmap first (`decode N ms`).
+- **Wishlist row was empty on the TV** (2026-11-21): not a client bug — the code matches Android's
+  (`bookmarks` → folder named Wishlist / Хочу посмотреть / Посмотреть → `bookmarks/<id>?page=1`).
+  The kino.pub account Natapub is logged into had no such folder (only "watch" and "AV"), so
+  Natapub created an empty "Wishlist" on its first Home load (13:38, 2026-11-21). The row fills
+  as titles are added there. `wishlist: folder <id> "<title>" count N; all folders: … -> returned M items`
+  shows what the account holds.
+- `webapis.appcommon.setScreenSaver` logs `tv screensaver on|off` on success, an error otherwise.
+- The idle clock counts key presses only. Video in the player never times out; the Search field's
+  typing counts as presses.
 
 - Chromium 63 traps are enforced by `scripts/check-dist.mjs` (see `../README.md` Gotchas): never
   use flex `gap`, `aspect-ratio`, `inset`, `?.`/`??` in output, `Array.flat`, `Object.fromEntries`…
