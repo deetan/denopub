@@ -53,14 +53,12 @@ function continueTile(e: ContinueEntry) {
 }
 
 /**
- * This TV (UE43RU7402, 2026-11-21) draws the row starting at the THIRD tile and puts the first two at
- * the end, reversed: sent [P, A, B, C … Y, Z] showed B C … Y Z A P. So the two last cards go first,
- * in reverse, and the row reads P A B … Y Z.
+ * Every tile and the section carry `position` (1..n). Without it Samsung applies its own order
+ * (seen 2026-11-21: the row started at our third tile, the first two at its end, reversed);
+ * Samsung's Preview schema: shown in ascending position order. Found via litefin PR #545.
  */
-function tvOrder(tiles: object[]): object[] {
-  const n = tiles.length;
-  if (n < 3) return tiles;
-  return [tiles[n - 1], tiles[n - 2]].concat(tiles.slice(0, n - 2));
+function positioned(tiles: object[]): object[] {
+  return tiles.map((t, i) => Object.assign({}, t, { position: i + 1 }));
 }
 
 function buildTiles(d: HomeData): string {
@@ -80,7 +78,7 @@ function buildTiles(d: HomeData): string {
     .slice(0, MAX_CONTINUE)
     .forEach((e) => tiles.push(continueTile(e)));
   // One section: on this TV only one section showed.
-  return JSON.stringify({ sections: [{ title: 'Natapub', tiles: tvOrder(tiles) }] });
+  return JSON.stringify({ sections: [{ title: 'Natapub', position: 1, tiles: positioned(tiles) }] });
 }
 
 // ---------- sending ----------

@@ -273,7 +273,9 @@ same log sink).
   image loader sends **no User-Agent**, and Wikimedia answers that with 403. The tile now uses one
   picture kept in the repo (`public/preview-paintings.jpg`, 576×324 from the Russian Museum's site, ~55 KB, owner's choice) via GitHub raw,
   which answers 200 without a User-Agent (as does kino.pub's poster CDN).
-- The row **starts at the third tile** and shows the first two at its end, reversed (sent `P A B … Z`
-  → shown `B … Z A P`; `preview-svc: order:` lists what was sent). `tvOrder()` in `src/preview.ts`
-  sends the last two cards first, so the row reads Paintings, then Continue in Home's order.
+- **Tiles need `position`.** Without it the TV used its own order (sent `P A B … Z` → shown
+  `B … Z A P`); reordering what we send changed nothing. Now the section and every tile carry
+  `position` 1..n (`positioned()` in `src/preview.ts`; Samsung: shown in ascending position order —
+  found via litefin PR #545, which also notes that new tiles are applied only once the service exits).
+  `preview-svc: order:` lists what was sent.
 - `preview-svc: section "…": N tiles, first <url>` in the log shows exactly what the TV was given.
