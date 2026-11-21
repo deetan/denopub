@@ -173,7 +173,7 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
   stretched over the screen. The story's room is reserved from the first second (it fades in at
   4 s instead of expanding the caption, an animation of height). After ↑ ↓ the drift is re-aimed
   rather than continued on the same curve. Ken Burns turns itself off for the session after two
-  paintings in a row with drift frame p95 > 40 ms. No custom User-Agent for Commons (a browser
+  paintings in a row with drift frame p95 > 50 ms, measured only while the page is visible. No custom User-Agent for Commons (a browser
   can't set one). Titles use a bundled Noto Serif (Android: the system serif).
 - Device settings: only hls4 + SSL are requested; **HEVC / 4K / HDR stay off** because only H.264
   ≤ 1080p was proven through hls.js on this TV. Turning them on is a kino.pub device setting plus a
@@ -199,6 +199,9 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
   as titles are added there. `wishlist: folder <id> "<title>" count N; all folders: … -> returned M items`
   shows what the account holds.
 - `webapis.appcommon.setScreenSaver` logs `tv screensaver on|off` on success, an error otherwise.
+- **Frame times only count while the page is visible.** A hidden page gets `requestAnimationFrame`
+  at ~1 Hz; those 1000 ms "frames" once turned Ken Burns off, although the owner saw fades and
+  drift run smoothly on the TV. On the TV (visible) drift is avg ~20 ms, p95 ~36 ms.
 - The idle clock counts key presses only. Video in the player never times out; the Search field's
   typing counts as presses.
 

@@ -433,18 +433,20 @@ class Show {
   private loop(): void {
     const tick = (t: number) => {
       if (this.disposed) return;
-      if (this.lastFrame && this.shownAt) {
+      // Only frames while the page is visible: a hidden page gets rAF at ~1 Hz (1000 ms "frames"
+      // that once turned Ken Burns off although the TV showed it smoothly).
+      const visible = document.visibilityState === 'visible';
+      if (visible && this.lastFrame && this.shownAt) {
         const d = t - this.lastFrame;
-        // A gap of seconds means the app was hidden, not a dropped frame.
         if (d < 2000) (Date.now() - this.shownAt < FADE_MS ? this.frames.fade : this.frames.drift).push(d);
       }
-      this.lastFrame = t;
+      this.lastFrame = visible ? t : 0;
       this.raf = requestAnimationFrame(tick);
     };
     this.raf = requestAnimationFrame(tick);
   }
 
-  /** One line per slide; two slow drifts in a row turn Ken Burns off for this session. */
+  /** One line per slide; two slow (visible) drifts in a row turn Ken Burns off for this session. */
   private logFrames(): void {
     const s = this.slide;
     if (!s || !this.frames.drift.length) return;
@@ -452,7 +454,8 @@ class Show {
     log('art: frames', s.p.id, '· fade', stats(f.fade), '· drift', stats(f.drift), this.kenBurns ? '' : '(no Ken Burns)');
     const sorted = f.drift.slice().sort((x, y) => x - y);
     const p95 = sorted[Math.floor(sorted.length * 0.95)] || 0;
-    if (this.kenBurns && p95 > 40) {
+    // Needs a real sample (≥ 5 s of visible frames) and p95 > 50 ms on two slides in a row.
+    if (this.kenBurns && f.drift.length >= 150 && p95 > 50) {
       this.slowSlides++;
       if (this.slowSlides >= 2) {
         this.kenBurns = false;
