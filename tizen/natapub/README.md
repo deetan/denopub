@@ -262,3 +262,11 @@ same log sink).
   (seen only with the fixture's short test stream; kino.pub positions are always inside the file).
 - The fixture puts a fake token in the dev browser's localStorage; a later non-fixture run just
   fails the refresh and shows the login screen.
+
+### Home bar row — what we learned on the TV (2026-11-21)
+- Only **one section** is shown; a second section ("Screensaver") was silently ignored.
+- Wikimedia serves only **standard thumbnail widths** (…330, 500, 960, 1280…); a 640 px thumb returned
+  HTTP 400 and the TV dropped that tile without any error. Use 500. Wikimedia also answers 403 to an empty User-Agent.
+- The row behaves like a **ring that opens where it was last left**, so the first tile (Paintings) can
+  appear at the far end. It is there — scroll ←.
+- `preview-svc: section "…": N tiles, first <url>` in the log shows exactly what the TV was given.

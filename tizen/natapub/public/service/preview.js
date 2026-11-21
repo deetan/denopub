@@ -105,6 +105,7 @@ function run() {
     var o = JSON.parse(json);
     if (!o || !o.sections) throw new Error('no sections');
     o.sections.forEach(function (s) {
+      slog('section "' + s.title + '": ' + (s.tiles || []).length + ' tiles, first ' + ((s.tiles && s.tiles[0] && s.tiles[0].image_url) || '-'));
       (s.tiles || []).forEach(function (t) {
         count++;
         var m = /^(\w+:\/\/[^\/]+)/.exec(t.image_url || '');

@@ -76,21 +76,23 @@ async function buildTiles(d: HomeData): Promise<string> {
     art.push({
       title: S.previewPaintings,
       subtitle: S.screensaver,
-      image_ratio: '16by9',
+      // Same shape as the posters, so the row stays even.
+      image_ratio: '2by3',
       image_url: img,
       action_data: JSON.stringify({ open: 'art' }),
-      is_playable: false,
+      is_playable: true,
     });
   }
   repo.continueSerials(d).concat(repo.continueMovies(d), repo.continueKids(d))
     .filter((e) => !!e.poster)
     .slice(0, MAX_CONTINUE)
     .forEach((e) => tiles.push(continueTile(e)));
-  // Paintings get a section of their own: within one section the TV draws every tile in one shape
-  // (the 16:9 painting became an unlabelled portrait crop among the posters, owner 2026-11-21).
+  // One section: on this TV only one section showed. The row is circular and opens where it was last
+  // left, so the Paintings tile (first) may sit at the far end — scroll ← from the first visible tile.
+  // An earlier 640 px Commons thumbnail returned 400 (non-standard width); 500 works.
   const sections: object[] = [];
-  if (art.length) sections.push({ title: S.screensaver, tiles: art });
-  if (tiles.length) sections.push({ title: S.previewContinue, tiles });
+  const all = art.concat(tiles);
+  if (all.length) sections.push({ title: 'Natapub', tiles: all });
   return JSON.stringify({ sections });
 }
 
