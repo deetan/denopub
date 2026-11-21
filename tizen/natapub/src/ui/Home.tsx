@@ -102,7 +102,9 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ row: string; id: number } | null>(null);
   const [hero, setHero] = useState<ContinueEntry | null>(null);
-  const [onSearch, setOnSearch] = useState(false);
+  // Top-right buttons (Android: «Поиск», then «Картины» to its right): which one has focus, if any.
+  const [top, setTop] = useState<'search' | 'art' | null>(null);
+  const onSearch = top !== null;
   const [menu, setMenu] = useState<{ title: string; actions: MenuAction[] } | null>(null);
   const [toast, showToast] = useToast();
   const [exitArmed, setExitArmed] = useState(false);
@@ -255,11 +257,20 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
   }
 
   useKeys((e: KeyEv) => {
-    // The Search button, top-right (Android: always visible; ↑ from the first row reaches it).
-    if (onSearch) {
-      if (e.code === KEY.OK) { if (!e.down) nav.search(); return true; }
+    // Search and Screensaver, top-right (Android: always visible; ↑ from the first row reaches
+    // Search, → from it the paintings button). The paintings return here with focus on the button.
+    if (top) {
+      if (e.code === KEY.OK) {
+        if (!e.down) {
+          if (top === 'search') nav.search();
+          else nav.paintings();
+        }
+        return true;
+      }
       if (!e.down) return true;
-      if (e.back || e.code === KEY.DOWN) setOnSearch(false);
+      if (e.back || e.code === KEY.DOWN) setTop(null);
+      else if (e.code === KEY.RIGHT) setTop('art');
+      else if (e.code === KEY.LEFT) setTop('search');
       return true;
     }
     if (!fRow || !fCard) {
@@ -294,7 +305,7 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
     }
     if (e.code === KEY.LEFT && fCol > 0) move(fRow, fCol - 1);
     else if (e.code === KEY.RIGHT && fCol < fRow.cards.length - 1) move(fRow, fCol + 1);
-    else if (e.code === KEY.UP && rows.indexOf(fRow) === 0) { userMoved.current = true; setOnSearch(true); }
+    else if (e.code === KEY.UP && rows.indexOf(fRow) === 0) { userMoved.current = true; setTop('search'); }
     else if (e.code === KEY.UP) moveRow(-1);
     else if (e.code === KEY.DOWN) moveRow(1);
     return true;
@@ -338,7 +349,10 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
 
   return (
     <div class="screen">
-      <div class={'btn outline home-search' + (onSearch ? ' f' : '')}>{S.search}</div>
+      <div class="home-top">
+        <div class={'btn outline' + (top === 'search' ? ' f' : '')}>{S.search}</div>
+        <div class={'btn outline home-art' + (top === 'art' ? ' f' : '')}>{S.screensaver}</div>
+      </div>
       <div ref={track} class="vtrack" style={{ paddingBottom: '27px' }}>
         {contRows.length ? (
           <div data-row="continue" style={{ marginBottom: '28px' }}>

@@ -151,6 +151,9 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
   `natapub.weather.v2` / `.loc.v2` (v1 still held Palilula for a day after the move); the
   `weather:` line logs the coordinates used. New Belgrade has ~1 outdoor sensor within 3 km, so
   the AQI there usually comes from the CAMS model.
+  **Screensaver button** on Home (Android «Картины»): right of Search in the top bar (↑ from the
+  first row → Search, → → Screensaver), OK opens the paintings at once; any key but ← → ↑ ↓
+  returns to Home with focus still on the button.
   Log lines `art:` (painting, image size, load / decode / first-frame ms, one frame-timing line per
   painting) and `weather:`.
   **English only, never Russian** (owner 2026-11-21): titleEn, artistEn + artistLife, date,
@@ -165,7 +168,7 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
 
 - Out of scope: Sport row (and its live preview), recommendations, IMDb (rating, English plot,
   trailers, "More like this" — IMDb answers 403 to the TV), kino.pub trailers, skip intro/credits,
-  self-update, the Home «Paintings» button (paintings only come as the in-app screensaver).
+  self-update.
 - Paintings: no CSS blur (far too slow here) — the backdrop is a 32×18 canvas copy of the painting
   stretched over the screen. The story's room is reserved from the first second (it fades in at
   4 s instead of expanding the caption, an animation of height). After ↑ ↓ the drift is re-aimed

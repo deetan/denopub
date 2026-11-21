@@ -28,6 +28,8 @@ export interface Nav {
   open: (id: number) => void;
   play: (t: ResumeTarget) => void;
   search: () => void;
+  /** The paintings now (Home's Screensaver button); any key but ← → ↑ ↓ returns. */
+  paintings: () => void;
   back: () => void;
 }
 
@@ -81,6 +83,10 @@ export function App() {
     open: (id) => setStack((s) => s.concat([{ k: 'details', id }])),
     play: (target) => setStack((s) => s.concat([{ k: 'player', target }])),
     search: () => setStack((s) => s.concat([{ k: 'search' }])),
+    paintings: () => {
+      log('art: opened from the Home button');
+      setArt(true);
+    },
     back: () => setStack((s) => (s.length > 1 ? s.slice(0, s.length - 1) : s)),
   };
 
