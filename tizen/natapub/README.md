@@ -67,7 +67,7 @@ scripts/check-dist.mjs  fails the build on syntax/APIs/CSS newer than Chrome 63
 - **Playback**: hls.js (classic script, `window.Hls`). kino.pub's hls4 manifest lists every
   quality and every voiceover; the level matching the chosen file is pinned (no ABR), voiceovers
   are `hls.audioTrack`, subtitles `hls.subtitleTrack` (in-manifest WebVTT rendered by the video
-  element, sized by `.player video::cue` in `app.css`: 14 px, half the default). Voiceover labels come from kino.pub `audios[]`, matched by the "NN." prefix of the
+  element, sized by `.player video::cue` in `app.css`: 20 px; the default 27 px was too big, 14 px too small). Voiceover labels come from kino.pub `audios[]`, matched by the "NN." prefix of the
   rendition name.
 
 ## Dev loop
