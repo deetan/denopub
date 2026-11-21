@@ -326,6 +326,7 @@ export function Player({ nav, start }: { nav: Nav; start: ResumeTarget }) {
   return (
     <div class="screen player">
       <video ref={videoRef} />
+      <Subtitles video={videoRef} lifted={overlay !== 'none'} />
       <div class={'bigpause fade' + (bigPause && !wantsPlay && !err ? ' show' : '')}>❚❚</div>
       <div class={'cornerpause fade' + (userPaused && !bigPause && !wantsPlay && overlay === 'none' && !err ? ' show' : '')}>❚❚</div>
       <div class={'jumpbar fade' + (jumpVisible && overlay === 'none' ? ' show' : '')}>
@@ -495,6 +496,58 @@ function TracksPanel({ ui, ctl, onExitUp, onEpisodePicked }: {
         if (r.key === 'subs') return chipRow(r, ui.subtitles);
         return chipRow(r, ui.qualities);
       })}
+    </div>
+  );
+}
+
+/** Text of a WebVTT cue without its tags (<i>, <b>, <c.x>, <v Name>), entities decoded. */
+function cueText(raw: string): string {
+  return raw
+    .replace(/<[^>]*>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .trim();
+}
+
+/**
+ * Subtitles drawn by us, not by the video element. Chromium 63 spaces cue lines by its own
+ * default line height (5 % of the video) and honours each cue's line position, so smaller text
+ * came out as lines far apart, one of them down in the letterbox (owner, 2026-11-21). hls.js still
+ * picks and loads the track (mode "showing"); app.css hides the native drawing and this reads
+ * the track's activeCues.
+ */
+function Subtitles(p: { video: { current: HTMLVideoElement | null }; lifted: boolean }) {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    let last = '';
+    const tick = () => {
+      const v = p.video.current;
+      let out = '';
+      if (v && v.textTracks) {
+        for (let i = 0; i < v.textTracks.length; i++) {
+          const t = v.textTracks[i];
+          if (t.mode !== 'showing' || !t.activeCues) continue;
+          const lines: string[] = [];
+          for (let j = 0; j < t.activeCues.length; j++) {
+            const c = t.activeCues[j] as VTTCue;
+            const s = cueText(c.text || '');
+            if (s) lines.push(s);
+          }
+          out = lines.join('\n');
+          break;
+        }
+      }
+      if (out !== last) {
+        last = out;
+        setText(out);
+      }
+    };
+    const id = window.setInterval(tick, 150);
+    return () => window.clearInterval(id);
+  }, []);
+  if (!text) return null;
+  return (
+    <div class={'subs' + (p.lifted ? ' lifted' : '')}>
+      {text.split('\n').map((l, i) => <div key={i}><span>{l}</span></div>)}
     </div>
   );
 }

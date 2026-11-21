@@ -66,8 +66,10 @@ scripts/check-dist.mjs  fails the build on syntax/APIs/CSS newer than Chrome 63
   ← → holds repeat from timers (the TV never sent auto-repeat).
 - **Playback**: hls.js (classic script, `window.Hls`). kino.pub's hls4 manifest lists every
   quality and every voiceover; the level matching the chosen file is pinned (no ABR), voiceovers
-  are `hls.audioTrack`, subtitles `hls.subtitleTrack` (in-manifest WebVTT rendered by the video
-  element, sized by `.player video::cue` in `app.css`: 20 px; the default 27 px was too big, 14 px too small). Voiceover labels come from kino.pub `audios[]`, matched by the "NN." prefix of the
+  are `hls.audioTrack`, subtitles `hls.subtitleTrack` (in-manifest WebVTT; hls.js loads the
+  track, but `<Subtitles>` in `Player.tsx` draws the active cues itself, 20 px, normal line spacing, above
+  the OSD when it is open — Chromium 63's own drawing kept its 27 px line step at smaller sizes and
+  honoured cue line positions, so lines sat far apart, one in the letterbox). Voiceover labels come from kino.pub `audios[]`, matched by the "NN." prefix of the
   rendition name.
 
 ## Dev loop
