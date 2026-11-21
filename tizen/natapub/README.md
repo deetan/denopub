@@ -172,7 +172,7 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
 ## Home bar row (Smart Hub Preview)
 
 With the Natapub tile focused on the Samsung home bar, a row shows above it: **Paintings**
-(subtitle "Screensaver", a fixed picture — Levitan's «Над вечным покоем» cropped 2:3,
+(subtitle "Screensaver", a fixed picture — Nissky's «Над снегами» (1960, the orange plane) cut to 16:9,
 `public/preview-paintings.jpg`, served from GitHub raw; see below), then the Continue
 cards Series → Movies → Kids (Home's order; English `displayTitle`, caption "S1·E5 · next episode"
 / "36 min left", kino.pub's wide 16:9 still when there is one, else the 2:3 poster). At most 15
@@ -269,7 +269,7 @@ same log sink).
 - Wikimedia serves only **standard thumbnail widths** (…330, 500, 960, 1280…); a 640 px thumb returned
   HTTP 400 and the TV dropped that tile without any error. Even at 500 it never showed: the home bar's
   image loader sends **no User-Agent**, and Wikimedia answers that with 403. The tile now uses one
-  picture kept in the repo (`public/preview-paintings.jpg`, ~130 KB, owner's choice) via GitHub raw,
+  picture kept in the repo (`public/preview-paintings.jpg`, 576×324 from the Russian Museum's site, ~55 KB, owner's choice) via GitHub raw,
   which answers 200 without a User-Agent (as does kino.pub's poster CDN).
 - The row behaves like a **ring that opens where it was last left**, so the first tile (Paintings) can
   appear at the far end. It is there — scroll ←.

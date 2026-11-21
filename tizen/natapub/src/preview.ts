@@ -26,11 +26,12 @@ export type DeepLink = { k: 'art' } | { k: 'play'; target: ResumeTarget };
 
 // ---------- tiles ----------
 
-// The Paintings tile's picture: Levitan's "Above Eternal Peace", cropped 2:3, kept in this repo and
-// served by GitHub (owner's pick, 2026-11-21). The home bar's image loader sends no User-Agent, and
+// The Paintings tile's picture: Georgy Nissky's "Over the Snows" (1960, Russian Museum; the orange
+// plane), the museum's 600 px image cut to 16:9, kept in this repo and served by GitHub (owner's
+// pick, 2026-11-21; the TV draws tiles 250 px high, so 324 px is enough). The home bar's image loader sends no User-Agent, and
 // Wikimedia answers that with 403 — the tile was then dropped without a word. GitHub raw answers 200.
 const PAINTINGS_IMAGE =
-  'https://raw.githubusercontent.com/deetan/denopub/main/tizen/natapub/public/preview-paintings.jpg';
+  'https://raw.githubusercontent.com/deetan/denopub/main/tizen/natapub/public/preview-paintings.jpg?v=2'; // bump ?v= when the picture changes (the TV caches by URL)
 
 /** "S1·E5 · next episode", "1 h 10 min left" — the Continue card's caption. */
 function continueText(e: ContinueEntry): string {
@@ -56,8 +57,8 @@ function buildTiles(d: HomeData): string {
     {
       title: S.previewPaintings,
       subtitle: S.screensaver,
-      // Same shape as the posters, so the row stays even.
-      image_ratio: '2by3',
+      // The painting is 186 × 100 cm: shown whole, like the wide episode stills.
+      image_ratio: '16by9',
       image_url: PAINTINGS_IMAGE,
       action_data: JSON.stringify({ open: 'art' }),
       is_playable: true,
