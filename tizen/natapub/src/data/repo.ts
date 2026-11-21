@@ -55,7 +55,9 @@ export function isKidsContent(item: Item): boolean {
 const DAY = 24 * 3600 * 1000;
 const MID_ONLY_MAX_AGE_MS = 120 * DAY;
 const WISHLIST_TITLE = 'Wishlist';
-const WISHLIST_NAMES = ['wishlist', 'хочу посмотреть', 'посмотреть'];
+// In priority order. Natapub's kino.pub account keeps its to-watch list in "watch" (owner, 2026-11-21);
+// the Android names follow, and "Wishlist" is created only if none exists.
+const WISHLIST_NAMES = ['watch', 'wishlist', 'хочу посмотреть', 'посмотреть'];
 
 const maxOf = (xs: number[]) => xs.reduce((a, b) => (b > a ? b : a), 0);
 
@@ -268,7 +270,8 @@ let wishlistFolderInfo = '';
 async function wishlistFolder(): Promise<number> {
   if (wishlistFolderId != null) return wishlistFolderId;
   const folders = await kp.bookmarkFolders();
-  const found = folders.filter((f) => WISHLIST_NAMES.indexOf(f.title.trim().toLowerCase()) >= 0)[0];
+  const found = WISHLIST_NAMES.map((n) => folders.filter((f) => f.title.trim().toLowerCase() === n)[0])
+    .filter((f) => !!f)[0];
   let id = found ? found.id : null;
   if (id == null) {
     const created = await kp.createBookmarkFolder(WISHLIST_TITLE);

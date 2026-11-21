@@ -102,7 +102,9 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
 - Throttled API client (`KinopubApi.throttled`), HTML error pages → "kino.pub is not responding (HTTP n)".
 - Home: compact hero, Continue Series / Movies / Kids with the same candidates, resume rule and
   recency (`startedAt` / `playedAt` in localStorage), kids rule and background classification,
-  Wishlist with "NEW" (seen after 1.5 s of focus), New movies / series, Popular. Cached Home
+  Wishlist = the account's bookmark folder **"watch"** (Natapub runs on its own kino.pub account,
+  owner 2026-11-21), else "Wishlist"/"Хочу посмотреть", else a new "Wishlist"; every page is read
+  (kino.pub pages bookmarks by 20). Wishlist with "NEW" (seen after 1.5 s of focus), New movies / series, Popular. Cached Home
   first; a failing or empty part keeps its old content. Back → first card, Back again within
   2.5 s exits. Focus stays on the card you left; Home reloads on every return and on
   `visibilitychange`.

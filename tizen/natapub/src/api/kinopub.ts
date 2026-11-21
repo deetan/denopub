@@ -190,7 +190,18 @@ export const kp = {
 
   // ---------- bookmarks ----------
   bookmarkFolders: () => get<{ items: BookmarkFolder[] }>('bookmarks').then((r) => r.items || []),
-  bookmarkItems: (folder: number) => get<ItemsResponse>('bookmarks/' + folder, { page: 1 }).then((r) => r.items || []),
+  /** Every page of a folder (kino.pub pages bookmarks by 20; `pagination.total` = page count). Max 10 pages. */
+  bookmarkItems: async (folder: number) => {
+    const all: Item[] = [];
+    for (let page = 1; page <= 10; page++) {
+      const r = await get<ItemsResponse>('bookmarks/' + folder, { page });
+      const items = r.items || [];
+      for (let i = 0; i < items.length; i++) all.push(items[i]);
+      const pages = r.pagination && r.pagination.total ? r.pagination.total : 1;
+      if (!items.length || page >= pages) break;
+    }
+    return all;
+  },
   createBookmarkFolder: (title: string) =>
     post<{ folder?: BookmarkFolder }>('bookmarks/create', {}, { title }).then((r) => r.folder || null),
   itemFolders: (item: number) => get<{ folders: BookmarkFolder[] }>('bookmarks/get-item-folders', { item }).then((r) => r.folders || []),

@@ -62,7 +62,7 @@ export function isSerial(it: Item): boolean {
   return (it.seasons || []).length > 0 || SERIAL_TYPES.indexOf(it.type || '') >= 0;
 }
 
-export interface ItemsResponse { items: Item[] }
+export interface ItemsResponse { items: Item[]; pagination?: { total?: number; current?: number; perpage?: number } }
 
 export interface WatchingSerial { id: number; title: string; type?: string; posters?: Posters; total?: number; watched?: number; new?: number; subscribed?: boolean }
 export interface WatchingMovie { id: number; title: string; type?: string; posters?: Posters }
