@@ -1,5 +1,5 @@
 // Natapub's row on the TV's home bar (Samsung Smart Hub Preview), shown above the Natapub tile
-// when it is focused, like YouTube's: Paintings first (the next painting of the deck), then the
+// when it is focused, like YouTube's: Paintings first (a fixed picture, PAINTINGS_IMAGE), then the
 // Continue cards Series → Movies → Kids. Proven 2026-11-21 with the generic Tizen certificate.
 //  - Home calls publish() after every load. The tiles go to the web service
 //    (public/service/preview.js) as app-control data; it keeps them and calls
@@ -8,14 +8,11 @@
 //  - OK on a tile starts or resumes Natapub with the tile's action_data in the PAYLOAD
 //    app-control key ({"values": "<action_data>"}); `appcontrol` fires when it is already running
 //    (config.xml: reload="disable"). onDeepLink() hands them to App.
-import { loadCatalog, peekNext } from './art/catalog';
-import type { Painting } from './art/painting';
 import type { ContinueEntry, HomeData, ResumeTarget } from './data/repo';
 import * as repo from './data/repo';
 import { displayTitle } from './format';
 import { log } from './log';
 import { isTizen } from './platform';
-import { md5 } from './md5';
 import { S } from './ui/strings';
 
 declare const tizen: any;
@@ -29,24 +26,11 @@ export type DeepLink = { k: 'art' } | { k: 'play'; target: ResumeTarget };
 
 // ---------- tiles ----------
 
-/** A direct upload.wikimedia.org thumbnail: the home bar's image loader may not follow redirects. */
-export function commonsThumb(file: string, width: number, fullWidth: number): string {
-  const name = file.replace(/ /g, '_');
-  const h = md5(name);
-  const enc = encodeURIComponent(name);
-  const base = 'https://upload.wikimedia.org/wikipedia/commons/';
-  if (fullWidth > 0 && fullWidth <= width) return base + h[0] + '/' + h.substr(0, 2) + '/' + enc;
-  const ext = (/\.([a-z0-9]+)$/i.exec(name) || ['', ''])[1].toLowerCase();
-  const suffix = ext === 'tif' || ext === 'tiff' ? '.jpg' : ext === 'svg' ? '.png' : '';
-  return base + 'thumb/' + h[0] + '/' + h.substr(0, 2) + '/' + enc + '/' + width + 'px-' + enc + suffix;
-}
-
-function paintingImage(p: Painting): string | null {
-  // Wikimedia serves only standard thumbnail widths (…, 330, 500, 960, 1280, …): 640 gave HTTP 400,
-  // and the home bar silently drops a tile whose image fails.
-  if (p.commons) return commonsThumb(p.commons, 500, p.w);
-  return p.url || null;
-}
+// The Paintings tile's picture: Levitan's "Above Eternal Peace", cropped 2:3, kept in this repo and
+// served by GitHub (owner's pick, 2026-11-21). The home bar's image loader sends no User-Agent, and
+// Wikimedia answers that with 403 — the tile was then dropped without a word. GitHub raw answers 200.
+const PAINTINGS_IMAGE =
+  'https://raw.githubusercontent.com/deetan/denopub/main/tizen/natapub/public/preview-paintings.jpg';
 
 /** "S1·E5 · next episode", "1 h 10 min left" — the Continue card's caption. */
 function continueText(e: ContinueEntry): string {
@@ -67,33 +51,25 @@ function continueTile(e: ContinueEntry) {
   };
 }
 
-async function buildTiles(d: HomeData): Promise<string> {
-  const art: object[] = [];
-  const tiles: object[] = [];
-  const painting = peekNext(await loadCatalog());
-  const img = painting ? paintingImage(painting) : null;
-  if (img) {
-    art.push({
+function buildTiles(d: HomeData): string {
+  const tiles: object[] = [
+    {
       title: S.previewPaintings,
       subtitle: S.screensaver,
       // Same shape as the posters, so the row stays even.
       image_ratio: '2by3',
-      image_url: img,
+      image_url: PAINTINGS_IMAGE,
       action_data: JSON.stringify({ open: 'art' }),
       is_playable: true,
-    });
-  }
+    },
+  ];
   repo.continueSerials(d).concat(repo.continueMovies(d), repo.continueKids(d))
     .filter((e) => !!e.poster)
     .slice(0, MAX_CONTINUE)
     .forEach((e) => tiles.push(continueTile(e)));
   // One section: on this TV only one section showed. The row is circular and opens where it was last
   // left, so the Paintings tile (first) may sit at the far end — scroll ← from the first visible tile.
-  // An earlier 640 px Commons thumbnail returned 400 (non-standard width); 500 works.
-  const sections: object[] = [];
-  const all = art.concat(tiles);
-  if (all.length) sections.push({ title: 'Natapub', tiles: all });
-  return JSON.stringify({ sections });
+  return JSON.stringify({ sections: [{ title: 'Natapub', tiles }] });
 }
 
 // ---------- sending ----------
@@ -141,7 +117,7 @@ export async function publish(d: HomeData): Promise<void> {
   if (!isTizen) return;
   let json: string;
   try {
-    json = await buildTiles(d);
+    json = buildTiles(d);
   } catch (e) {
     log('preview: tiles failed', (e as Error).message);
     return;

@@ -172,7 +172,8 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
 ## Home bar row (Smart Hub Preview)
 
 With the Natapub tile focused on the Samsung home bar, a row shows above it: **Paintings**
-(subtitle "Screensaver", image = the next painting of the deck, `peekNext()`), then the Continue
+(subtitle "Screensaver", a fixed picture — Levitan's «Над вечным покоем» cropped 2:3,
+`public/preview-paintings.jpg`, served from GitHub raw; see below), then the Continue
 cards Series → Movies → Kids (Home's order; English `displayTitle`, caption "S1·E5 · next episode"
 / "36 min left", kino.pub's wide 16:9 still when there is one, else the 2:3 poster). At most 15
 Continue cards (16 tiles were set and accepted on the TV; how many it *draws* is up to Smart Hub).
@@ -205,8 +206,8 @@ Chromecast since, or the TV replayed the kept file), so the app first asks kino.
 
 **Limits** (Samsung's public-preview page; the personal `bg_service` variant follows the same
 format): `image_ratio` ∈ 16by9 / 4by3 / 1by1 / 2by3, thumbnails drawn 250 px high; no documented
-maximum tile count, image size or https rule — we use https only (upload.wikimedia.org direct
-thumbnails at 640 px, the home bar loader may not follow Commons' `Special:FilePath` redirects;
+maximum tile count, image size or https rule — we use https only (the Paintings picture from
+`raw.githubusercontent.com/deetan/denopub/main/…`, so it changes only after a push to `main`;
 kino.pub posters from its CDN). Logs: `preview:` (app) and `preview-svc:` (service, posted to the
 same log sink).
 
@@ -266,7 +267,10 @@ same log sink).
 ### Home bar row — what we learned on the TV (2026-11-21)
 - Only **one section** is shown; a second section ("Screensaver") was silently ignored.
 - Wikimedia serves only **standard thumbnail widths** (…330, 500, 960, 1280…); a 640 px thumb returned
-  HTTP 400 and the TV dropped that tile without any error. Use 500. Wikimedia also answers 403 to an empty User-Agent.
+  HTTP 400 and the TV dropped that tile without any error. Even at 500 it never showed: the home bar's
+  image loader sends **no User-Agent**, and Wikimedia answers that with 403. The tile now uses one
+  picture kept in the repo (`public/preview-paintings.jpg`, ~130 KB, owner's choice) via GitHub raw,
+  which answers 200 without a User-Agent (as does kino.pub's poster CDN).
 - The row behaves like a **ring that opens where it was last left**, so the first tile (Paintings) can
   appear at the far end. It is there — scroll ←.
 - `preview-svc: section "…": N tiles, first <url>` in the log shows exactly what the TV was given.
