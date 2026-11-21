@@ -3,7 +3,9 @@ import { authLost, tokens } from '../api/kinopub';
 import { ArtShow } from '../art/ArtShow';
 import { lastKey, touchIdle } from '../keys';
 import type { ResumeTarget } from '../data/repo';
+import * as repo from '../data/repo';
 import { log } from '../log';
+import { onDeepLink } from '../preview';
 import { Auth } from './Auth';
 import { Details } from './Details';
 import { Home } from './Home';
@@ -22,7 +24,8 @@ const IDLE_MS = (() => {
 /** Desktop `?stay`: keep the paintings when the tab is hidden (screenshot tools hide it). */
 const STAY = import.meta.env.DEV && /[?&]stay/.test(location.search);
 
-export type Route = { k: 'home' } | { k: 'search' } | { k: 'details'; id: number } | { k: 'player'; target: ResumeTarget };
+/** n: a fresh player for every deep link, even into the title already playing. */
+export type Route = { k: 'home' } | { k: 'search' } | { k: 'details'; id: number } | { k: 'player'; target: ResumeTarget; n?: number };
 
 export interface Nav {
   open: (id: number) => void;
@@ -51,6 +54,35 @@ export function App() {
 
   const top = stack[stack.length - 1];
   const [art, setArt] = useState(false);
+  const loggedInRef = useRef(loggedIn);
+  loggedInRef.current = loggedIn;
+  useEffect(() => {
+    // Home bar tiles (src/preview.ts): playback straight away with Home under it (Back → Home),
+    // or the paintings over Home.
+    onDeepLink((l) => {
+      if (!loggedInRef.current) {
+        log('deep link ignored: not logged in');
+        return;
+      }
+      touchIdle();
+      if (l.k === 'art') {
+        log('art: opened from the home bar');
+        setStack([{ k: 'home' }]);
+        setArt(true);
+      } else {
+        // The tile's resume point may be old: ask kino.pub (≤ 4 s), else play the tile's.
+        const t = l.target;
+        const late = new Promise<null>((ok) => window.setTimeout(() => ok(null), 4000));
+        Promise.race([repo.resumeFor(t.itemId).catch(() => null), late]).then((fresh) => {
+          const target = fresh || t;
+          log('deep link: play', target.itemId, 'S' + target.season + 'E' + target.episode, 'from', target.startSec, 's',
+            fresh ? '(kino.pub now; tile had S' + t.season + 'E' + t.episode + ' ' + t.startSec + ' s)' : '(as on the tile)');
+          setArt(false);
+          setStack([{ k: 'home' }, { k: 'player', target, n: Date.now() }]);
+        });
+      }
+    });
+  }, []);
   const artOn = useRef(false);
   artOn.current = art;
   const idleAllowed = loggedIn && top.k !== 'player';
@@ -94,7 +126,7 @@ export function App() {
     <div>
       {stack.map((r, i) => {
         const active = i === stack.length - 1;
-        const key = i + ':' + r.k + (r.k === 'details' ? r.id : r.k === 'player' ? r.target.itemId : '');
+        const key = i + ':' + r.k + (r.k === 'details' ? r.id : r.k === 'player' ? r.target.itemId + ':' + (r.n || 0) : '');
         return (
           <div key={key} class={active ? '' : 'hidden'}>
             {r.k === 'home' ? <Home nav={nav} active={active} /> : null}

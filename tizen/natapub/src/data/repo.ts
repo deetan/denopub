@@ -16,6 +16,8 @@ export interface ContinueEntry {
   itemId: number;
   title: string;
   poster: string | null;
+  /** poster is kino.pub's 16:9 "wide" image (the home bar tile's ratio); else a 2:3 poster. */
+  posterWide?: boolean;
   isSerial: boolean;
   target: ResumeTarget;
   durationSec: number;
@@ -206,6 +208,16 @@ export async function continueWatching(limit = 80): Promise<ContinueEntry[]> {
 }
 
 /** Titles in [entries] not yet classified as kids/adult. */
+/**
+ * A title's resume point as of now (the home bar tiles carry the one from when they were set; the
+ * owner may have watched on in denopub since). Same rule as Continue, as if started here.
+ */
+export async function resumeFor(itemId: number): Promise<ResumeTarget | null> {
+  const info = await kp.watching(itemId, true);
+  const e = resumeEntry({ id: itemId, title: '', posters: {} } as unknown as Item, info, 0, true, false);
+  return e ? e.target : null;
+}
+
 export function unclassified(entries: ContinueEntry[]): number[] {
   const known = prefs.kidsFlags();
   return entries.map((e) => e.itemId).filter((id) => known[id] === undefined);
@@ -226,7 +238,7 @@ export async function classifyKids(ids: number[]): Promise<number[]> {
 function resumeEntry(item: Item, info: WatchingInfo, newEpisodes: number, explicit: boolean, midEpisodeOnly: boolean): ContinueEntry | null {
   const p = item.posters || {};
   const poster = p.wide || p.big || p.medium || null;
-  const base = { itemId: item.id, title: item.title, poster, isKids: false, lastActivityMs: 0 };
+  const base = { itemId: item.id, title: item.title, poster, posterWide: !!p.wide, isKids: false, lastActivityMs: 0 };
   if (info.seasons.length) {
     const flat: [number, WatchingVideo][] = [];
     info.seasons.slice().sort((a, b) => a.number - b.number).forEach((s) => {

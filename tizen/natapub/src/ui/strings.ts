@@ -16,6 +16,7 @@ export function formatMinutes(sec: number): string {
 export const S = {
   // Search
   search: 'Search',
+  previewPaintings: 'Paintings', // first tile of the home bar row (src/preview.ts)
   screensaver: 'Screensaver', // Home button that opens the paintings (Android «Картины»)
   searchHint: 'Movie or series title',
   searchAll: 'All',

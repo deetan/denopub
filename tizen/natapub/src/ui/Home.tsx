@@ -11,6 +11,7 @@ import { KEY, Press, useKeys } from '../keys';
 import type { KeyEv } from '../keys';
 import { log } from '../log';
 import { exitApp } from '../platform';
+import { publish as publishPreview } from '../preview';
 import type { Nav } from './App';
 import {
   ActionMenu, Badge, ContinueCard, FixedRow, Img, PosterCard, ProgressLine, rowOffsets, useToast, useVScroll,
@@ -122,9 +123,9 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
     if (!unknown.length) return;
     const kids = await repo.classifyKids(unknown).catch(() => [] as number[]);
     if (!kids.length) return;
-    setData((cur) => (cur ? Object.assign({}, cur, {
-      continueWatching: cur.continueWatching.map((e) => (kids.indexOf(e.itemId) >= 0 ? Object.assign({}, e, { isKids: true }) : e)),
-    }) : cur));
+    const mark = (list: ContinueEntry[]) => list.map((e) => (kids.indexOf(e.itemId) >= 0 ? Object.assign({}, e, { isKids: true }) : e));
+    setData((cur) => (cur ? Object.assign({}, cur, { continueWatching: mark(cur.continueWatching) }) : cur));
+    publishPreview(Object.assign({}, d, { continueWatching: mark(d.continueWatching) }));
   }
 
   async function refresh() {
@@ -136,6 +137,7 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
       setData(d);
       setError(null);
       log('home: loaded in', Date.now() - t0, 'ms;', d.continueWatching.length, 'continue,', d.wishlist.length, 'wishlist');
+      publishPreview(d);
       classifyNewTitles(d);
     } catch (e) {
       setError((e as Error).message);

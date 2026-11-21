@@ -44,6 +44,9 @@ src/
   art/weather.ts      Weather.kt: Open-Meteo, Sensor.Community AQI, ipwho.is, localStorage cache
   art/ArtShow.tsx     ArtShow.kt: slides, caption layout, Ken Burns / pan, weather band, frame timing
   dev/fixture.ts      desktop-only fake kino.pub (never in the TV build)
+  preview.ts          home bar row (Smart Hub Preview): builds the tiles, sends them to the service, parses deep links
+  md5.ts              MD5 for Wikimedia upload paths (direct thumbnail URLs for the Paintings tile)
+public/service/preview.js  the package's web service: keeps the tiles, calls webapis.preview.setPreviewData, exits
 scripts/paintings.mjs   builds public/paintings.json (git-ignored) from the Android asset; fails on Cyrillic
 public/               config.xml, icon.png (own icon, drawn by scripts/make-icon.py), hls.min.js (the spike's exact 1.5.20 build)
 scripts/check-dist.mjs  fails the build on syntax/APIs/CSS newer than Chrome 63
@@ -165,6 +168,47 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
   **and** at least as many `storyEn` stories, so a remote file older than the bundle never wins. The catalog's `date` / `artistLife` are
   Russian and are translated by `englishDate()`; any field that still holds Cyrillic is dropped,
   and `npm run build` fails if a date or life span would be lost that way.
+
+## Home bar row (Smart Hub Preview)
+
+With the Natapub tile focused on the Samsung home bar, a row shows above it: **Paintings**
+(subtitle "Screensaver", image = the next painting of the deck, `peekNext()`), then the Continue
+cards Series → Movies → Kids (Home's order; English `displayTitle`, caption "S1·E5 · next episode"
+/ "36 min left", kino.pub's wide 16:9 still when there is one, else the 2:3 poster). At most 15
+Continue cards (16 tiles were set and accepted on the TV; how many it *draws* is up to Smart Hub).
+
+**Data flow** (simplest thing that works on Tizen 5 with the generic certificate):
+1. Every Home load (cold start, return from the player, the TV waking) calls `publish()`
+   (`src/preview.ts`). Unchanged tiles are not sent twice in one run; every app start sends once.
+2. The tiles go as app-control data (`caller=ForegroundApp`, `tiles=<json>`) to the service
+   `natapubTV1.preview` (`config.xml`: `tizen:service` + `use.preview = bg_service`). Only a
+   service may call `webapis.preview.setPreviewData`.
+3. The service writes them to `/opt/usr/home/owner/apps_rw/natapubTV1/data/preview-tiles.json`
+   (the first folder of a candidate list that takes the write — `/opt/usr/apps/<pkg>/data` does
+   not exist on this TV), calls `setPreviewData`, and exits after 1.5 s.
+4. When the TV starts the service itself (install, boot, every so often — no app-control data),
+   it re-sets the kept file. So the row is filled after a reboot without opening Natapub, from the
+   last data Home saw. Test without the remote: `tizen run -p natapubTV1.preview -s <tv>:26101`
+   → log `preview-svc: restored … / TV run: set N tiles`.
+
+Samsung may ignore `setPreviewData` calls less than 10 min apart, so a send inside that window is
+repeated once after it (the kept file covers a dropped call at the TV's next run anyway).
+
+**Deep links**: OK on a tile starts or resumes Natapub with `operation/eden_resume` and
+`PAYLOAD = {"values": "<action_data>"}` (`action_data` is a JSON string; parsed twice). Cold start
+reads `getRequestedAppControl()` at boot (`initDeepLinks()`); a running app gets the `appcontrol`
+event (`reload="disable"` in `config.xml`). `{"open":"art"}` → Home with the paintings over it (any
+key other than ← → ↑ ↓ closes them onto Home). `{"play":{i,s,e,t}}` → stack `[Home, Player]`,
+so Back from the player lands on Home. The tile's resume point can be old (watched on the
+Chromecast since, or the TV replayed the kept file), so the app first asks kino.pub
+(`repo.resumeFor`, `/watching?id=`, same rule as Continue, ≤ 4 s) and only falls back to the tile.
+
+**Limits** (Samsung's public-preview page; the personal `bg_service` variant follows the same
+format): `image_ratio` ∈ 16by9 / 4by3 / 1by1 / 2by3, thumbnails drawn 250 px high; no documented
+maximum tile count, image size or https rule — we use https only (upload.wikimedia.org direct
+thumbnails at 640 px, the home bar loader may not follow Commons' `Special:FilePath` redirects;
+kino.pub posters from its CDN). Logs: `preview:` (app) and `preview-svc:` (service, posted to the
+same log sink).
 
 ## Not ported / differs from Android
 

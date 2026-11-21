@@ -8,6 +8,19 @@
     <access origin="*" subdomains="true"/>
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:app-control>
+        <tizen:src name="index.html" reload="disable"/>
+        <tizen:operation name="http://samsung.com/appcontrol/operation/eden_resume"/>
+    </tizen:app-control>
+    <tizen:metadata key="http://samsung.com/tv/metadata/use.preview" value="bg_service"/>
+    <tizen:service id="natapubTV1.preview" auto-restart="false">
+        <tizen:content src="service/preview.js"/>
+        <tizen:name>preview</tizen:name>
+        <tizen:icon src="icon.png"/>
+        <tizen:description>Natapub home bar preview</tizen:description>
+        <tizen:category name="http://tizen.org/category/service"/>
+    </tizen:service>
     <tizen:profile name="tv-samsung"/>
     <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
                    encryption="disable" install-location="auto" hwkey-event="enable"/>

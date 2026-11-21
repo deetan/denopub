@@ -117,6 +117,30 @@ function shuffled<T>(a: T[]): T[] {
   return r;
 }
 
+/** The painting deal() will show next, without taking it (the home bar's Paintings tile). */
+export function peekNext(all: Painting[]): Painting | null {
+  if (!all.length) return null;
+  const byId: Record<string, Painting> = {};
+  all.forEach((p) => (byId[p.id] = p));
+  let deck: string[] = [];
+  try {
+    deck = (localStorage.getItem(K_DECK) || '').split(',').filter((id) => !!byId[id]);
+  } catch (e) {
+    /* none */
+  }
+  if (!deck.length) {
+    // Shuffle the next round now, so the tile shows what deal() will really give.
+    deck = shuffled(Object.keys(byId));
+    try {
+      if (deck.length > 1 && deck[0] === localStorage.getItem(K_LAST)) deck.push(deck.shift() as string);
+      localStorage.setItem(K_DECK, deck.join(','));
+    } catch (e) {
+      /* quota */
+    }
+  }
+  return byId[deck[0]] || null;
+}
+
 /** Next painting from a persisted shuffled deck; reshuffles once every painting was shown. */
 export function deal(all: Painting[]): Painting | null {
   if (!all.length) return null;

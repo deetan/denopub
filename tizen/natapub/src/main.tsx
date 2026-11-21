@@ -2,6 +2,7 @@ import { render } from 'preact';
 import { initKeys } from './keys';
 import { installErrorHooks, log } from './log';
 import { platformInfo, registerKeys } from './platform';
+import { initDeepLinks } from './preview';
 import { App } from './ui/App';
 import './ui/app.css';
 import { VERSION } from './version';
@@ -25,6 +26,7 @@ async function boot(): Promise<void> {
   window.addEventListener('resize', fit);
   registerKeys();
   initKeys();
+  initDeepLinks(); // before App subscribes: a cold start's link waits for it
   render(<App />, document.getElementById('app') as HTMLElement);
   // One-time diagnostics for the TV (no screen access from the Mac): zoom and the bundled font.
   setTimeout(() => {
