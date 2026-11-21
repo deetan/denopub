@@ -271,6 +271,7 @@ same log sink).
   image loader sends **no User-Agent**, and Wikimedia answers that with 403. The tile now uses one
   picture kept in the repo (`public/preview-paintings.jpg`, 576×324 from the Russian Museum's site, ~55 KB, owner's choice) via GitHub raw,
   which answers 200 without a User-Agent (as does kino.pub's poster CDN).
-- The row behaves like a **ring that opens where it was last left**, so the first tile (Paintings) can
-  appear at the far end. It is there — scroll ←.
+- The row **starts at the third tile** and shows the first two at its end, reversed (sent `P A B … Z`
+  → shown `B … Z A P`; `preview-svc: order:` lists what was sent). `tvOrder()` in `src/preview.ts`
+  sends the last two cards first, so the row reads Paintings, then Continue in Home's order.
 - `preview-svc: section "…": N tiles, first <url>` in the log shows exactly what the TV was given.

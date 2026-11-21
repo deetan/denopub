@@ -106,6 +106,7 @@ function run() {
     if (!o || !o.sections) throw new Error('no sections');
     o.sections.forEach(function (s) {
       slog('section "' + s.title + '": ' + (s.tiles || []).length + ' tiles, first ' + ((s.tiles && s.tiles[0] && s.tiles[0].image_url) || '-'));
+      slog('order: ' + (s.tiles || []).map(function (t, i) { return i + ':' + t.title; }).join(' | '));
       (s.tiles || []).forEach(function (t) {
         count++;
         var m = /^(\w+:\/\/[^\/]+)/.exec(t.image_url || '');

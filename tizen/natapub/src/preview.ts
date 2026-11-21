@@ -52,6 +52,17 @@ function continueTile(e: ContinueEntry) {
   };
 }
 
+/**
+ * This TV (UE43RU7402, 2026-11-21) draws the row starting at the THIRD tile and puts the first two at
+ * the end, reversed: sent [P, A, B, C … Y, Z] showed B C … Y Z A P. So the two last cards go first,
+ * in reverse, and the row reads P A B … Y Z.
+ */
+function tvOrder(tiles: object[]): object[] {
+  const n = tiles.length;
+  if (n < 3) return tiles;
+  return [tiles[n - 1], tiles[n - 2]].concat(tiles.slice(0, n - 2));
+}
+
 function buildTiles(d: HomeData): string {
   const tiles: object[] = [
     {
@@ -68,9 +79,8 @@ function buildTiles(d: HomeData): string {
     .filter((e) => !!e.poster)
     .slice(0, MAX_CONTINUE)
     .forEach((e) => tiles.push(continueTile(e)));
-  // One section: on this TV only one section showed. The row is circular and opens where it was last
-  // left, so the Paintings tile (first) may sit at the far end — scroll ← from the first visible tile.
-  return JSON.stringify({ sections: [{ title: 'Natapub', tiles }] });
+  // One section: on this TV only one section showed.
+  return JSON.stringify({ sections: [{ title: 'Natapub', tiles: tvOrder(tiles) }] });
 }
 
 // ---------- sending ----------
