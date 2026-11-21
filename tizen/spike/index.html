@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>denopub spike</title>
+<script src="$WEBAPIS/webapis/webapis.js"></script>
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; background: #000; color: #eee;
+               font: 22px/1.35 sans-serif; overflow: hidden; }
+  #av { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  #vid { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; display: none; background: #000; }
+  #ui { position: absolute; left: 40px; top: 30px; width: 1000px; }
+  #code { font-size: 64px; color: #ffd54f; margin: 10px 0; }
+  .menu div { padding: 6px 14px; border-radius: 6px; }
+  .menu div.sel { background: #3949ab; }
+  #hud { position: absolute; right: 40px; top: 30px; width: 800px; background: rgba(0,0,0,.65);
+         padding: 14px 18px; border-radius: 8px; white-space: pre-wrap; font-size: 20px; }
+  #sub { position: absolute; left: 0; right: 0; bottom: 70px; text-align: center; font-size: 40px;
+         color: #fff; text-shadow: 0 0 6px #000, 0 0 3px #000; white-space: pre-wrap; }
+  #log { position: absolute; left: 40px; bottom: 20px; width: 1000px; height: 330px; overflow: hidden;
+         font: 16px/1.3 monospace; color: #9e9e9e; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<object id="av" type="application/avplayer"></object>
+<video id="vid"></video>
+<div id="ui"></div>
+<div id="hud" style="display:none"></div>
+<div id="sub"></div>
+<div id="log"></div>
+<script src="hls.min.js"></script>
+<script src="spike.js"></script>
+</body>
+</html>

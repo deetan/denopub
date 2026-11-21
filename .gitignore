@@ -11,3 +11,10 @@ captures/
 .env
 .tv-address
 *.zip
+# Tizen (Natapub)
+*.wgt
+*.p12
+tizen/**/node_modules/
+tizen/**/dist/
+.buildResult/
+.sign/
