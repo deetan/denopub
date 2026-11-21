@@ -17,6 +17,7 @@ export const S = {
   // Search
   search: 'Search',
   previewPaintings: 'Paintings', // first tile of the home bar row (src/preview.ts)
+  previewContinue: 'Continue watching', // section title of the Continue tiles in the home bar row
   screensaver: 'Screensaver', // Home button that opens the paintings (Android «Картины»)
   searchHint: 'Movie or series title',
   searchAll: 'All',

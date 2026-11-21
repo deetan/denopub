@@ -66,11 +66,12 @@ function continueTile(e: ContinueEntry) {
 }
 
 async function buildTiles(d: HomeData): Promise<string> {
+  const art: object[] = [];
   const tiles: object[] = [];
   const painting = peekNext(await loadCatalog());
   const img = painting ? paintingImage(painting) : null;
   if (img) {
-    tiles.push({
+    art.push({
       title: S.previewPaintings,
       subtitle: S.screensaver,
       image_ratio: '16by9',
@@ -83,7 +84,12 @@ async function buildTiles(d: HomeData): Promise<string> {
     .filter((e) => !!e.poster)
     .slice(0, MAX_CONTINUE)
     .forEach((e) => tiles.push(continueTile(e)));
-  return JSON.stringify({ sections: [{ title: 'Natapub', tiles }] });
+  // Paintings get a section of their own: within one section the TV draws every tile in one shape
+  // (the 16:9 painting became an unlabelled portrait crop among the posters, owner 2026-11-21).
+  const sections: object[] = [];
+  if (art.length) sections.push({ title: S.screensaver, tiles: art });
+  if (tiles.length) sections.push({ title: S.previewContinue, tiles });
+  return JSON.stringify({ sections });
 }
 
 // ---------- sending ----------
