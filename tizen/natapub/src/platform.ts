@@ -22,6 +22,9 @@ export const KEY = {
   NEXT: 10233,
   PREV: 10232,
   SPACE: 32,
+  /** Tizen IME (on-screen keyboard) Done / Cancel, sent to the focused input. */
+  IME_DONE: 65376,
+  IME_CANCEL: 65385,
 };
 
 export const isTizen = typeof (window as any).tizen !== 'undefined';

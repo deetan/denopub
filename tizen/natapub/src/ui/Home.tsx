@@ -5,7 +5,8 @@ import type { Item } from '../api/models';
 import { prefs } from '../data/prefs';
 import * as repo from '../data/repo';
 import type { ContinueEntry, HomeData } from '../data/repo';
-import { formatMinutes, plural, splitTitle } from '../format';
+import { displayTitle, otherTitle } from '../format';
+import { S } from './strings';
 import { KEY, Press, useKeys } from '../keys';
 import type { KeyEv } from '../keys';
 import { log } from '../log';
@@ -33,35 +34,36 @@ function rowsOf(d: HomeData): Row[] {
   const cont = (key: string, label: string, list: ContinueEntry[]) => {
     if (list.length) rows.push({ key, label, continue: true, cards: list.map((e) => ({ kind: 'c', e } as Card)) });
   };
-  cont('cs', 'Сериалы', repo.continueSerials(d));
-  cont('cm', 'Фильмы', repo.continueMovies(d));
-  cont('ck', 'Детям', repo.continueKids(d));
+  cont('cs', S.rowSeries, repo.continueSerials(d));
+  cont('cm', S.rowMovies, repo.continueMovies(d));
+  cont('ck', S.rowKids, repo.continueKids(d));
   const newIn = d.wishlist.filter((w) => w.isNew).length;
   if (d.wishlist.length) {
     rows.push({
-      key: 'w', label: 'Вишлист', continue: false,
-      badge: newIn > 0 ? newIn + ' ' + plural(newIn, 'новое', 'новых', 'новых') : null,
+      key: 'w', label: S.rowWishlist, continue: false,
+      badge: newIn > 0 ? S.newCount(newIn) : null,
       cards: d.wishlist.map((w) => ({ kind: 'p', item: w.item, isNew: w.isNew, wish: true } as Card)),
     });
   }
   const posters = (key: string, label: string, items: Item[]) => {
     if (items.length) rows.push({ key, label, continue: false, cards: items.map((item) => ({ kind: 'p', item } as Card)) });
   };
-  posters('fm', 'Новые фильмы', d.freshMovies);
-  posters('fs', 'Новые сериалы', d.freshSerials);
-  posters('hot', 'Популярное', d.hot);
+  posters('fm', S.rowNewMovies, d.freshMovies);
+  posters('fs', S.rowNewSeries, d.freshSerials);
+  posters('hot', S.rowPopular, d.hot);
   return rows;
 }
 
 function continueMeta(e: ContinueEntry): string {
   const left = Math.max(0, e.durationSec - e.target.startSec);
-  if (e.target.startSec > 0) return 'ещё ' + formatMinutes(left);
-  return e.isSerial ? 'след. серия' : 'сначала';
+  if (e.target.startSec > 0) return S.timeLeft(left);
+  return e.isSerial ? S.nextEpisode : S.fromStart;
 }
 
 /** Big description of the focused "continue" card (ContinueHero): 92 dp, two columns. */
 function Hero({ e }: { e: ContinueEntry }) {
-  const [ru, orig] = splitTitle(e.title);
+  const ru = displayTitle(e.title);
+  const orig = otherTitle(e.title);
   const ep = repo.episodeLabel(e);
   return (
     <div class="hero">
@@ -76,12 +78,12 @@ function Hero({ e }: { e: ContinueEntry }) {
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <span class="t-body ell">{[ep, continueMeta(e)].filter(Boolean).join('  ·  ')}</span>
             {e.newEpisodes > 0 ? (
-              <span style={{ marginLeft: '10px' }}><Badge text={'+' + e.newEpisodes + ' ' + plural(e.newEpisodes, 'новая', 'новые', 'новых')} /></span>
+              <span style={{ marginLeft: '10px' }}><Badge text={S.newEpisodes(e.newEpisodes)} /></span>
             ) : null}
           </div>
           {e.isSerial && e.remainingEpisodes > 1 ? (
             <div class="t-label muted" style={{ marginTop: '4px' }}>
-              ещё {e.remainingEpisodes} {plural(e.remainingEpisodes, 'серия', 'серии', 'серий')} впереди
+              {S.episodesAhead(e.remainingEpisodes)}
             </div>
           ) : null}
           <div style={{ marginTop: '4px' }}><ProgressLine progress={repo.progressOf(e)} width={260} height={3} /></div>
@@ -100,6 +102,7 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ row: string; id: number } | null>(null);
   const [hero, setHero] = useState<ContinueEntry | null>(null);
+  const [onSearch, setOnSearch] = useState(false);
   const [menu, setMenu] = useState<{ title: string; actions: MenuAction[] } | null>(null);
   const [toast, showToast] = useToast();
   const [exitArmed, setExitArmed] = useState(false);
@@ -212,46 +215,53 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
   }
 
   function act(done: string, block: () => Promise<unknown>) {
-    block().then(() => showToast(done), (e) => showToast('Не получилось: ' + (e as Error).message)).then(() => refresh());
+    block().then(() => showToast(done), (e) => showToast(S.failed((e as Error).message))).then(() => refresh());
   }
   const setWishlisted = (id: number, on: boolean) =>
-    act(on ? 'Добавлено в вишлист' : 'Убрано из вишлиста', () => repo.setWishlisted(id, on));
-  const setWatching = (id: number) => act('Добавлено в «Продолжить»', async () => repo.setWatching(await kp.item(id), true));
-  const setItemWatched = (id: number) => act('Отмечено просмотренным', async () => repo.setItemWatched(await kp.item(id), true));
+    act(on ? S.addedToWishlist : S.removedFromWishlist, () => repo.setWishlisted(id, on));
+  const setWatching = (id: number) => act(S.addedToContinue, async () => repo.setWatching(await kp.item(id), true));
+  const setItemWatched = (id: number) => act(S.markedWatched, async () => repo.setItemWatched(await kp.item(id), true));
 
   function itemMenu(item: Item, inWishlist: boolean) {
     const id = item.id;
     setMenu({
-      title: splitTitle(item.title)[0],
+      title: displayTitle(item.title),
       actions: [
-        { label: 'Открыть карточку', run: () => nav.open(id) },
+        { label: S.openCard, run: () => nav.open(id) },
         inWishlist
-          ? { label: 'Убрать из вишлиста', run: () => setWishlisted(id, false) }
-          : { label: 'Добавить в вишлист', run: () => setWishlisted(id, true) },
-        { label: 'Начал смотреть', hint: 'добавить в «Продолжить»', run: () => setWatching(id) },
-        { label: 'Отметить просмотренным', run: () => setItemWatched(id) },
+          ? { label: S.removeFromWishlist, run: () => setWishlisted(id, false) }
+          : { label: S.addToWishlist, run: () => setWishlisted(id, true) },
+        { label: S.startedWatching, hint: S.startedWatchingHint, run: () => setWatching(id) },
+        { label: S.markWatched, run: () => setItemWatched(id) },
       ],
     });
   }
 
   function continueMenu(e: ContinueEntry) {
     const ep = repo.episodeLabel(e);
-    const actions: MenuAction[] = [{ label: 'Открыть карточку', run: () => nav.open(e.itemId) }];
+    const actions: MenuAction[] = [{ label: S.openCard, run: () => nav.open(e.itemId) }];
     if (ep) {
       actions.push({
-        label: 'Отметить ' + ep + ' просмотренной', hint: 'продолжить со следующей',
-        run: () => act('Отмечено просмотренным', () => repo.setEpisodeWatched(e.itemId, e.target.season, e.target.episode, true)),
+        label: S.markEpisodeWatched(ep), hint: S.markEpisodeWatchedHint,
+        run: () => act(S.markedWatched, () => repo.setEpisodeWatched(e.itemId, e.target.season, e.target.episode, true)),
       });
     }
     actions.push(
-      { label: e.isSerial ? 'Отметить весь сериал просмотренным' : 'Отметить просмотренным', run: () => setItemWatched(e.itemId) },
-      { label: 'Убрать из «Продолжить»', hint: 'очистить историю на kino.pub', run: () => act('Убрано из «Продолжить»', () => repo.removeFromContinue(e.itemId)) },
-      { label: 'Добавить в вишлист', run: () => setWishlisted(e.itemId, true) },
+      { label: e.isSerial ? S.markSeriesWatched : S.markWatched, run: () => setItemWatched(e.itemId) },
+      { label: S.removeFromContinue, hint: S.removeFromContinueHint, run: () => act(S.removedFromContinue, () => repo.removeFromContinue(e.itemId)) },
+      { label: S.addToWishlist, run: () => setWishlisted(e.itemId, true) },
     );
-    setMenu({ title: splitTitle(e.title)[0], actions });
+    setMenu({ title: displayTitle(e.title), actions });
   }
 
   useKeys((e: KeyEv) => {
+    // The Search button, top-right (Android: always visible; ↑ from the first row reaches it).
+    if (onSearch) {
+      if (e.code === KEY.OK) { if (!e.down) nav.search(); return true; }
+      if (!e.down) return true;
+      if (e.back || e.code === KEY.DOWN) setOnSearch(false);
+      return true;
+    }
     if (!fRow || !fCard) {
       if (e.down && e.back) exitApp();
       return true;
@@ -284,6 +294,7 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
     }
     if (e.code === KEY.LEFT && fCol > 0) move(fRow, fCol - 1);
     else if (e.code === KEY.RIGHT && fCol < fRow.cards.length - 1) move(fRow, fCol + 1);
+    else if (e.code === KEY.UP && rows.indexOf(fRow) === 0) { userMoved.current = true; setOnSearch(true); }
     else if (e.code === KEY.UP) moveRow(-1);
     else if (e.code === KEY.DOWN) moveRow(1);
     return true;
@@ -294,7 +305,7 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
       <div class="screen">
         <div class="center-msg">
           <div class="t-body" style={{ color: error ? 'var(--badge)' : 'var(--muted)' }}>
-            {error ? 'Не загрузилось: ' + error : data ? 'Пусто' : 'Загрузка…'}
+            {error ? S.loadFailed(error) : data ? S.empty : S.loading}
           </div>
         </div>
       </div>
@@ -308,7 +319,7 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
       const e = c.e;
       return (
         <ContinueCard
-          title={splitTitle(e.title)[0]} image={e.poster} episodeLabel={repo.episodeLabel(e)} meta={continueMeta(e)}
+          title={displayTitle(e.title)} image={e.poster} episodeLabel={repo.episodeLabel(e)} meta={continueMeta(e)}
           progress={repo.progressOf(e)} newBadge={e.newEpisodes > 0 ? '+' + e.newEpisodes : null} focused={focused} width={CW}
         />
       );
@@ -319,14 +330,15 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
       : [it.year ? String(it.year) : null, it.imdb_rating ? 'IMDb ' + it.imdb_rating.toFixed(1) : null].filter(Boolean).join(' · ');
     return (
       <PosterCard
-        title={splitTitle(it.title)[0]} image={it.posters ? it.posters.medium : null} subtitle={subtitle}
-        badge={c.isNew ? 'НОВОЕ' : null} serial={isSerial(it)} focused={focused} width={PW}
+        title={displayTitle(it.title)} image={it.posters ? it.posters.medium : null} subtitle={subtitle}
+        badge={c.isNew ? S.newBadge : null} serial={isSerial(it)} focused={focused} width={PW}
       />
     );
   };
 
   return (
     <div class="screen">
+      <div class={'btn outline home-search' + (onSearch ? ' f' : '')}>{S.search}</div>
       <div ref={track} class="vtrack" style={{ paddingBottom: '27px' }}>
         {contRows.length ? (
           <div data-row="continue" style={{ marginBottom: '28px' }}>
@@ -334,7 +346,7 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
             {contRows.map((r) => (
               <div key={r.key} data-row={r.key} class={fRow === r ? 'f' : ''} style={{ marginTop: '6px' }}>
                 <div class="t-label muted" style={{ padding: '0 48px', marginBottom: '6px' }}>{r.label}</div>
-                <FixedRow id={'home:' + r.key} items={r.cards} width={CW} gap={GAP} focus={fRow === r ? fCol : null} render={renderCard(r)} />
+                <FixedRow id={'home:' + r.key} items={r.cards} width={CW} gap={GAP} focus={!onSearch && fRow === r ? fCol : null} render={renderCard(r)} />
               </div>
             ))}
           </div>
@@ -345,11 +357,11 @@ export function Home({ nav, active }: { nav: Nav; active: boolean }) {
               <span class="t-headline">{r.label}</span>
               {r.badge ? <Badge text={r.badge} /> : null}
             </div>
-            <FixedRow id={'home:' + r.key} items={r.cards} width={PW} gap={GAP} focus={fRow === r ? fCol : null} render={renderCard(r)} />
+            <FixedRow id={'home:' + r.key} items={r.cards} width={PW} gap={GAP} focus={!onSearch && fRow === r ? fCol : null} render={renderCard(r)} />
           </div>
         ))}
       </div>
-      {exitArmed ? <div class="toast big">Нажмите «Назад» ещё раз, чтобы выйти</div> : null}
+      {exitArmed ? <div class="toast big">{S.pressBackAgain}</div> : null}
       {toast ? <div class="toast">{toast}</div> : null}
       {menu ? <ActionMenu title={menu.title} actions={menu.actions} onClose={() => setMenu(null)} /> : null}
     </div>

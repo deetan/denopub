@@ -21,8 +21,22 @@ const isDown: Record<number, boolean> = {};
 
 export function initKeys(): void {
   const handled = [KEY.LEFT, KEY.UP, KEY.RIGHT, KEY.DOWN, KEY.OK, KEY.BACK, KEY.BACKSPACE, KEY.SPACE];
+  // While a text field has DOM focus (the IME is up) it keeps its typing keys: only the keys that
+  // leave the field reach the screens, and Backspace is a delete there, not Back.
+  const inField = (ev: KeyboardEvent) => {
+    const t = ev.target as HTMLElement | null;
+    return !!t && t.tagName === 'INPUT';
+  };
+  const fieldKeys = [KEY.UP, KEY.DOWN, KEY.OK, KEY.BACK, KEY.ESC, KEY.IME_DONE, KEY.IME_CANCEL];
   document.addEventListener('keydown', (ev) => {
     const code = ev.keyCode;
+    if (inField(ev)) {
+      if (fieldKeys.indexOf(code) < 0) return;
+      isDown[code] = true;
+      dispatch({ code, down: true, repeat: false, back: code === KEY.BACK || code === KEY.ESC });
+      if (code !== KEY.OK) ev.preventDefault();
+      return;
+    }
     const repeat = !!isDown[code];
     isDown[code] = true;
     dispatch({ code, down: true, repeat, back: isBack(code) });
@@ -30,6 +44,7 @@ export function initKeys(): void {
   });
   document.addEventListener('keyup', (ev) => {
     const code = ev.keyCode;
+    if (inField(ev) && fieldKeys.indexOf(code) < 0) return;
     isDown[code] = false;
     dispatch({ code, down: false, repeat: false, back: isBack(code) });
     if (handled.indexOf(code) >= 0) ev.preventDefault();

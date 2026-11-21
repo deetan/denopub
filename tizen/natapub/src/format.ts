@@ -1,11 +1,8 @@
-// Russian copy helpers, ported from ui/common/Cards.kt.
+// Title and time helpers.
 
-export function formatMinutes(sec: number): string {
-  const m = Math.floor(sec / 60);
-  return m >= 60 ? Math.floor(m / 60) + ' ч ' + (m % 60) + ' мин' : m + ' мин';
-}
+export { formatMinutes, plural } from './ui/strings';
 
-/** kino.pub titles are "Русское / Original". */
+/** kino.pub titles are "Русское / Original". Returns the two parts (second may be null). */
 export function splitTitle(title: string): [string, string | null] {
   const i = title.indexOf(' / ');
   if (i < 0) return [title, null];
@@ -13,14 +10,27 @@ export function splitTitle(title: string): [string, string | null] {
   return [title.substring(0, i), orig || null];
 }
 
-/** plural(4, "серия", "серии", "серий") → "серии". */
-export function plural(n: number, one: string, few: string, many: string): string {
-  const m100 = n % 100;
-  const m10 = n % 10;
-  if (m100 >= 11 && m100 <= 14) return many;
-  if (m10 === 1) return one;
-  if (m10 >= 2 && m10 <= 4) return few;
-  return many;
+const latin = /[A-Za-z]/;
+
+/**
+ * The title to show (owner, 2026-11-21: English wherever there is one): split on " / ", take the
+ * part with Latin letters, else the whole string. Used for items and episode titles alike.
+ */
+export function displayTitle(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const parts = raw.split(' / ').map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return raw;
+  const en = parts.filter((p) => latin.test(p))[0];
+  return en || raw;
+}
+
+/** The other half of a "Русское / Original" title (the one displayTitle didn't pick), or null. */
+export function otherTitle(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const shown = displayTitle(raw);
+  if (shown === raw) return null;
+  const rest = raw.split(' / ').map((p) => p.trim()).filter((p) => p && p !== shown);
+  return rest.length ? rest.join(' / ') : null;
 }
 
 const pad2 = (n: number) => (n < 10 ? '0' : '') + n;
@@ -34,9 +44,5 @@ export function clock(ms: number): string {
 }
 
 export function clockTenths(ms: number): string {
-  return clock(ms) + ',' + Math.floor((ms % 1000) / 100);
-}
-
-export function fixed1(n: number): string {
-  return n.toFixed(1);
+  return clock(ms) + '.' + Math.floor((ms % 1000) / 100);
 }

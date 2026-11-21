@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { afterLogin, pollDeviceToken, requestDeviceCode } from '../api/kinopub';
 import { log } from '../log';
 import { VERSION } from '../version';
+import { S } from './strings';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -56,12 +57,12 @@ export function Auth({ onDone }: { onDone: () => void }) {
   return (
     <div class="screen">
       <div class="center-msg">
-        <div class="t-headline">Войти в kino.pub</div>
-        <div class="t-title muted" style={{ marginTop: '20px' }}>Откройте {uri} и введите код</div>
+        <div class="t-headline">{S.signIn}</div>
+        <div class="t-title muted" style={{ marginTop: '20px' }}>{S.openAndEnter(uri)}</div>
         <div class="t-display" style={{ fontSize: '72px', letterSpacing: '12px', color: 'var(--accent)', marginTop: '20px', paddingLeft: '12px' }}>
           {code || '······'}
         </div>
-        {error ? <div class="t-body" style={{ color: 'var(--badge)', marginTop: '20px' }}>Ошибка: {error}</div> : null}
+        {error ? <div class="t-body" style={{ color: 'var(--badge)', marginTop: '20px' }}>{S.error(error)}</div> : null}
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import { PlayerController } from '../player/controller';
 import type { EpisodeCard, PlayerUi, TrackOption } from '../player/controller';
 import type { Nav } from './App';
 import { ChipRow, FixedRow, Img, ProgressLine } from './common';
+import { S } from './strings';
 
 type Overlay = 'none' | 'fine' | 'osd' | 'tracks';
 
@@ -37,15 +38,15 @@ function fineStepMs(held: number): number {
   if (held < 3000) return 2000;
   return 5000;
 }
-const stepLabel = (ms: number) => (ms >= 60000 ? ms / 60000 + ' мин' : ms / 1000 + ' с');
-const stepLabelFine = (ms: number) => (ms < 1000 ? '0,5 с' : ms / 1000 + ' с');
+const stepLabel = (ms: number) => (ms >= 60000 ? S.min(ms / 60000) : S.sec(ms / 1000));
+const stepLabelFine = (ms: number) => (ms < 1000 ? S.halfSec : S.sec(ms / 1000));
 /** Signed burst distance: "+2 с", "−45 с", "+1 мин 30 с". */
 function jumpLabel(ms: number): string {
   const sec = Math.round(Math.abs(ms) / 1000);
   const sign = ms < 0 ? '−' : '+';
-  if (sec < 60) return sign + sec + ' с';
-  if (sec % 60 === 0) return sign + sec / 60 + ' мин';
-  return sign + Math.floor(sec / 60) + ' мин ' + (sec % 60) + ' с';
+  if (sec < 60) return sign + S.sec(sec);
+  if (sec % 60 === 0) return sign + S.min(sec / 60);
+  return sign + S.minSec(Math.floor(sec / 60), sec % 60);
 }
 
 function frac(pos: number, dur: number): number {
@@ -82,7 +83,7 @@ export function Player({ nav, start }: { nav: Nav; start: ResumeTarget }) {
   const [, setTick] = useState(0);
   const [scrubMs, setScrubMs] = useState<number | null>(null);
   const [scrubHint, setScrubHint] = useState('');
-  const [fineLabel, setFineLabel] = useState('0,5 с');
+  const [fineLabel, setFineLabel] = useState(S.halfSec);
   const [fineBar, setFineBar] = useState(true);
   const [userPaused, setUserPaused] = useState(false);
   const [bigPause, setBigPause] = useState(false);
@@ -298,7 +299,7 @@ export function Player({ nav, start }: { nav: Nav; start: ResumeTarget }) {
         <div class="t-title" style={{ color: 'var(--accent)', marginBottom: '8px' }}>{jumpLabel(jumpTotal)}</div>
         <SeekBar pos={pos} dur={dur} scrub={null} emphasized={false} />
       </div>
-      {err ? <div class="err t-body">Ошибка воспроизведения: {err}</div> : null}
+      {err ? <div class="err t-body">{S.playbackError(err)}</div> : null}
       <div class={'topbar' + (overlay === 'fine' && fineBar ? ' show' : '')}>
         <SeekBar pos={pos} dur={dur} scrub={null} emphasized />
         <div class="spread" style={{ marginTop: '8px' }}>
@@ -360,15 +361,15 @@ function TracksPanel({ ui, ctl, onExitUp, onEpisodePicked }: {
   const hasEpisodes = !!(ui.prev || ui.next);
   const [picking, setPicking] = useState(false);
   const tiles: { e: EpisodeCard; caption: string | null }[] = picking
-    ? ui.episodes.map((e) => ({ e, caption: e.current ? 'Сейчас' : null }))
+    ? ui.episodes.map((e) => ({ e, caption: e.current ? S.now : null }))
     : ([] as { e: EpisodeCard; caption: string | null }[])
-      .concat(ui.prev ? [{ e: ui.prev, caption: '‹ Предыдущая' }] : [])
-      .concat(ui.next ? [{ e: ui.next, caption: 'Следующая ›' }] : []);
+      .concat(ui.prev ? [{ e: ui.prev, caption: S.previous }] : [])
+      .concat(ui.next ? [{ e: ui.next, caption: S.next }] : []);
   const rows: PRow[] = [];
-  if (hasEpisodes) rows.push({ key: 'eps', label: picking ? 'Все серии' : 'Серии', size: tiles.length });
-  if (ui.audio.length) rows.push({ key: 'audio', label: 'Озвучка', size: ui.audio.length });
-  if (ui.subtitles.length) rows.push({ key: 'subs', label: 'Субтитры', size: ui.subtitles.length });
-  if (ui.qualities.length) rows.push({ key: 'quality', label: 'Качество', size: ui.qualities.length });
+  if (hasEpisodes) rows.push({ key: 'eps', label: picking ? S.rowAllEpisodes : S.rowEpisodes, size: tiles.length });
+  if (ui.audio.length) rows.push({ key: 'audio', label: S.rowAudio, size: ui.audio.length });
+  if (ui.subtitles.length) rows.push({ key: 'subs', label: S.rowSubtitles, size: ui.subtitles.length });
+  if (ui.qualities.length) rows.push({ key: 'quality', label: S.rowQuality, size: ui.qualities.length });
   const sel = (o: TrackOption[]) => Math.max(0, o.map((x) => x.selected).indexOf(true));
   const initial = (): { row: string; cols: Record<string, number> } => ({
     row: hasEpisodes ? 'eps' : 'audio',

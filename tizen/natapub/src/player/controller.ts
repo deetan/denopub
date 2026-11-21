@@ -9,6 +9,8 @@ import type { TrackChoice } from '../data/prefs';
 import * as repo from '../data/repo';
 import type { ResumeTarget } from '../data/repo';
 import { log } from '../log';
+import { S } from '../ui/strings';
+import { displayTitle } from '../format';
 
 // hls.min.js (the spike's exact build) is loaded as a classic script before the app.
 const HlsCtor = (window as any).Hls as typeof HlsType;
@@ -46,7 +48,7 @@ export function subtitleName(raw: string): string {
 
 export function channelsLabel(ch?: number | null): string | null {
   if (!ch) return null;
-  if (ch === 1) return 'моно';
+  if (ch === 1) return S.mono;
   if (ch === 2) return '2.0';
   if (ch === 6) return '5.1';
   if (ch === 8) return '7.1';
@@ -108,7 +110,7 @@ export class PlayerController {
     });
     video.addEventListener('error', () => {
       const err = video.error;
-      if (!this.hls && err) this.setUi({ error: 'код ' + err.code });
+      if (!this.hls && err) this.setUi({ error: S.errorCode(err.code) });
     });
     this.timer = window.setInterval(() => {
       if (!video.paused) this.saveProgress();
@@ -142,14 +144,14 @@ export class PlayerController {
     if (!it) return;
     const v = repo.video(it, target.season, target.episode);
     if (!v) {
-      this.setUi({ error: 'Нет такой серии' });
+      this.setUi({ error: S.noSuchEpisode });
       return;
     }
     this.current = target;
     this.v = v;
     const f = pickFile(v.files || [], this.choice.maxHeight);
     if (!f) {
-      this.setUi({ error: 'Нет файлов' });
+      this.setUi({ error: S.noFiles });
       return;
     }
     this.file = f;
@@ -195,8 +197,8 @@ export class PlayerController {
       if (c.current) at = i;
     });
     this.setUi({
-      title: it.title,
-      episodeLabel: target.season != null ? 'S' + target.season + '·E' + target.episode + (v.title && v.title.trim() ? ' · ' + v.title : '') : null,
+      title: displayTitle(it.title),
+      episodeLabel: target.season != null ? 'S' + target.season + '·E' + target.episode + (v.title && v.title.trim() ? ' · ' + displayTitle(v.title) : '') : null,
       audio: [],
       subtitles: [],
       qualities: this.qualityOptions(v.files || [], f),
@@ -254,8 +256,8 @@ export class PlayerController {
       return {
         season: s,
         episode: v.number,
-        label: s != null ? 'S' + s + '·E' + v.number : 'Часть ' + v.number,
-        title: v.title && v.title.trim() ? v.title : null,
+        label: s != null ? 'S' + s + '·E' + v.number : S.part(v.number),
+        title: v.title && v.title.trim() ? displayTitle(v.title) : null,
         thumbnail: v.thumbnail || null,
         progress: watched ? 1 : v.duration > 0 ? Math.min(1, sec / v.duration) : 0,
         current: s === at.season && v.number === at.episode,
@@ -357,7 +359,7 @@ export class PlayerController {
     const hls = this.hls;
     if (!hls) return [];
     const remembered = this.choice.subtitleLang ? subtitleName(this.choice.subtitleLang) : null;
-    const all = hls.subtitleTracks.map((t, i) => ({ t, i, name: subtitleName(t.name || t.lang || 'Субтитры ' + (i + 1)) }));
+    const all = hls.subtitleTracks.map((t, i) => ({ t, i, name: subtitleName(t.name || t.lang || S.subtitlesN(i + 1)) }));
     const rank = (x: { t: MediaPlaylist; name: string }) => {
       const lang = (x.t.lang || '').toLowerCase();
       if (remembered && x.name === remembered) return 0;
@@ -419,7 +421,7 @@ export class PlayerController {
     const audio = this.audioMeta().map((o) => {
       const m = o.meta;
       const label = (m && m.author && m.author.title) || (m && m.type && m.type.title)
-        || (o.t.name || '').replace(/^\d+\.\s*/, '').trim() || o.t.lang || 'Дорожка ' + (o.i + 1);
+        || (o.t.name || '').replace(/^\d+\.\s*/, '').trim() || o.t.lang || S.trackN(o.i + 1);
       const detail = [
         ((m && m.lang) || o.t.lang || '').toUpperCase() || null,
         channelsLabel(m ? m.channels : null),
@@ -429,7 +431,7 @@ export class PlayerController {
     });
     const on = hls.subtitleTrack >= 0 && hls.subtitleDisplay;
     const seen: Record<string, number> = {};
-    const subs: TrackOption[] = [{ key: 's-off', label: 'Выкл', detail: null, selected: !on, value: -1 }].concat(
+    const subs: TrackOption[] = [{ key: 's-off', label: S.off, detail: null, selected: !on, value: -1 }].concat(
       this.textTracks().map((x) => {
         seen[x.name] = (seen[x.name] || 0) + 1;
         const n = seen[x.name];
@@ -509,15 +511,15 @@ export class PlayerController {
       const l = hls.levels[hls.currentLevel];
       const codec = (l.videoCodec || '').indexOf('avc') === 0 ? 'AVC' : /^(hvc|hev)/.test(l.videoCodec || '') ? 'HEVC' : (l.videoCodec || '').toUpperCase();
       if (codec) parts.push(codec);
-      if (l.bitrate > 0) parts.push('поток ' + (l.bitrate / 1e6).toFixed(1) + ' Мбит/с');
+      if (l.bitrate > 0) parts.push(S.stream((l.bitrate / 1e6).toFixed(1)));
     }
-    if (hls && hls.bandwidthEstimate > 0) parts.push('сеть ' + Math.round(hls.bandwidthEstimate / 1e6) + ' Мбит/с');
+    if (hls && hls.bandwidthEstimate > 0) parts.push(S.network(Math.round(hls.bandwidthEstimate / 1e6)));
     let buf = 0;
     const b = v.buffered;
     for (let i = 0; i < b.length; i++) {
       if (b.start(i) <= v.currentTime + 0.5 && b.end(i) > v.currentTime) buf = b.end(i) - v.currentTime;
     }
-    parts.push('буфер ' + Math.floor(buf) + ' с');
+    parts.push(S.buffer(Math.floor(buf)));
     return parts.join('  ·  ');
   }
 

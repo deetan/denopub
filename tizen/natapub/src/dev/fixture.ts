@@ -108,6 +108,11 @@ function route(method: string, path: string, q: Record<string, string>, body: Re
   if (m) return { item: db[Number(m[1])] };
   if (path === 'v1/items/fresh') return { items: Object.keys(db).map(Number).filter((id) => (q.type === 'serial') === (db[id].type === 'serial')).slice(0, 20).map((id) => db[id]) };
   if (path === 'v1/items/hot') return { items: [15, 17, 19, 21, 23, 25].map((id) => db[id]) };
+  if (path === 'v1/items/search') {
+    const ql = String(q.q || '').toLowerCase();
+    const hits = Object.keys(db).map(Number).filter((id) => (db[id].title || '').toLowerCase().indexOf(ql) >= 0 || ql === 'all').map((id) => db[id]);
+    return { items: hits.concat([{ id: 999, title: 'Fixture 3D / Fixture 3D', type: '3D', year: 2020 } as any]) };
+  }
   if (path === 'v1/items/similar') return { items: [11, 13, 42, 22, 24, 44, 26].map((id) => db[id]) };
   if (path === 'v1/bookmarks') return { items: [{ id: 77, title: 'Wishlist', count: wishlist.length }] };
   if (path === 'v1/bookmarks/77') return { items: wishlist.map((id) => db[id]) };

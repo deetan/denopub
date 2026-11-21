@@ -6,12 +6,14 @@ import { Auth } from './Auth';
 import { Details } from './Details';
 import { Home } from './Home';
 import { Player } from './Player';
+import { Search } from './Search';
 
-export type Route = { k: 'home' } | { k: 'details'; id: number } | { k: 'player'; target: ResumeTarget };
+export type Route = { k: 'home' } | { k: 'search' } | { k: 'details'; id: number } | { k: 'player'; target: ResumeTarget };
 
 export interface Nav {
   open: (id: number) => void;
   play: (t: ResumeTarget) => void;
+  search: () => void;
   back: () => void;
 }
 
@@ -36,6 +38,7 @@ export function App() {
   const nav: Nav = {
     open: (id) => setStack((s) => s.concat([{ k: 'details', id }])),
     play: (target) => setStack((s) => s.concat([{ k: 'player', target }])),
+    search: () => setStack((s) => s.concat([{ k: 'search' }])),
     back: () => setStack((s) => (s.length > 1 ? s.slice(0, s.length - 1) : s)),
   };
 
@@ -47,6 +50,7 @@ export function App() {
         return (
           <div key={key} class={active ? '' : 'hidden'}>
             {r.k === 'home' ? <Home nav={nav} active={active} /> : null}
+            {r.k === 'search' ? <Search nav={nav} active={active} /> : null}
             {r.k === 'details' ? <Details nav={nav} active={active} id={r.id} /> : null}
             {r.k === 'player' ? <Player nav={nav} start={r.target} /> : null}
           </div>

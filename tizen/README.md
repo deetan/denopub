@@ -68,7 +68,8 @@ the `.pw` file.
 ## Deploy
 
 - Spike: `tizen/spike/deploy.sh [tv-ip]` — package, sign, install, launch.
-- Natapub: see `natapub/README.md`.
+- Natapub: `tizen/natapub/deploy.sh [tv-ip]` — build, package, sign, install, launch. Details in
+  `natapub/README.md`. A fresh install shows a device code: enter it at kino.pub/device.
 
 Logs: both apps POST log lines to `http://<mac>:8765/log` when a sink is listening:
 `python3 tizen/tools/logsink.py /tmp/tv.log` then `tail -f /tmp/tv.log`. Without the sink the
@@ -77,8 +78,17 @@ posts fail silently.
 ## Gotchas
 
 - `tizen package` names the `.wgt` after `<name>` (with spaces); the scripts rename it.
-- Chromium 63: no `?.`, `??`, `Array.prototype.flat`, `Object.fromEntries`. The spike is
-  hand-written ES2017; Natapub is compiled by Vite/esbuild to `chrome63`.
+- Chromium 63: no `?.`, `??`, `Array.prototype.flat`, `Object.fromEntries`, CSS flex `gap`,
+  `aspect-ratio`, `inset`. The spike is hand-written ES2017; Natapub is compiled by Vite/esbuild to
+  `chrome63`, and `npm run build` fails if the bundle or sources still use any of these
+  (`natapub/scripts/check-dist.mjs`).
+- Packaged apps get one classic `<script defer>` bundle (IIFE), not an ES module: Vite's
+  `type="module" crossorigin` tag was never proven on the TV.
+- Key auto-repeat was never seen on the TV, but keyup always arrives: long-press and hold-to-seek
+  are timed between keydown and keyup.
+- hls.js reports levels lowest first and `audioTracks` is empty at `MANIFEST_PARSED`; it fills
+  on `AUDIO_TRACKS_UPDATED`.
+- The device the spike logged in as served only H.264 ≤ 1080p files (no device settings sent).
 - The One Remote sends ArrowUp/Down/Left/Right (37–40), Enter (13) and Back (10009) without
   registration. Media and channel keys need `tizen.tvinputdevice.registerKey`.
 - Tizen Studio is deprecated by Samsung but the 6.1 CLI still works for 2019 sets.

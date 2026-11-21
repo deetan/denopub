@@ -247,6 +247,17 @@ in `scripts/release.sh`). An APK signed with any other key is refused by the TV,
 to get around that loses the kino.pub login — keep a private backup of that keystore and never
 release from another machine.
 
+## Samsung TV: Natapub
+
+Samsung TVs can't run APKs, so `tizen/natapub/` is a separate web-app port of denopub for the
+owner's 2019 Samsung (Tizen 5.0, Chromium 63): Vite + TypeScript + Preact, hls.js for playback,
+packaged as a `.wgt` and side-loaded in developer mode with a generic Tizen certificate (no Samsung
+account). It keeps denopub's look and the Continue / wishlist / search / title card / player behaviour,
+with an English interface (strings in `tizen/natapub/src/ui/strings.ts`, English part of kino.pub
+titles); sport, recommendations, IMDb features, the paintings screensaver and self-update are not
+ported. Setup and signing: [`tizen/README.md`](tizen/README.md); the app:
+[`tizen/natapub/README.md`](tizen/natapub/README.md). Deploy: `tizen/natapub/deploy.sh`.
+
 ## License
 
 © dt. Personal project; public for reference, no license granted.

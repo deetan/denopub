@@ -1,4 +1,5 @@
 import { log } from '../log';
+import { S } from '../ui/strings';
 import { ApiError, NotAuthorized, shortPath, throttled } from './http';
 import type {
   BookmarkFolder, DeviceCode, HistoryEntry, Item, ItemsResponse, TokenResponse, WatchingInfo,
@@ -88,14 +89,14 @@ interface Opts { bg?: boolean; allowErrorBody?: boolean }
 
 function parse<T>(status: number, text: string, path: string, allowErrorBody: boolean): T {
   // An HTML page instead of JSON = kino.pub's web server is down / mid-maintenance.
-  if (text.replace(/^\s+/, '').charAt(0) === '<') throw new ApiError(status, 'kino.pub не отвечает (HTTP ' + status + '), попробуйте позже');
-  if (status === 429) throw new ApiError(429, 'kino.pub: слишком много запросов, попробуйте через минуту');
+  if (text.replace(/^\s+/, '').charAt(0) === '<') throw new ApiError(status, S.notResponding(status));
+  if (status === 429) throw new ApiError(429, S.tooManyRequests);
   if ((status < 200 || status > 299) && !allowErrorBody) throw new ApiError(status, text.substr(0, 300) || 'HTTP ' + status + ' ' + path);
   if (!text) return {} as T;
   try {
     return JSON.parse(text) as T;
   } catch (e) {
-    throw new ApiError(status, 'kino.pub: неверный ответ (' + path + ')');
+    throw new ApiError(status, S.badResponse(path));
   }
 }
 
@@ -155,6 +156,7 @@ export const kp = {
   fresh: (type: string) =>
     get<ItemsResponse>('items/fresh', { type, page: 1 }).catch(() => get<ItemsResponse>('items/new', { type, page: 1 })),
   hot: (type: string) => get<ItemsResponse>('items/hot', { type }),
+  search: (q: string) => get<ItemsResponse>('items/search', { q, perpage: 30 }).then((r) => r.items || []),
   similar: (id: number) => get<ItemsResponse>('items/similar', { id }).then((r) => r.items || []),
 
   // ---------- watching ----------
@@ -215,14 +217,17 @@ export async function afterLogin(version: string): Promise<void> {
   } catch (e) {
     log('device/notify failed', (e as Error).message);
   }
+  let step = 'device/info';
   try {
     const dev = await kp.deviceInfo();
+    step = 'references/streaming-type';
     const hls4 = (await kp.streamingTypes()).filter((t) => t.code === 'hls4')[0];
     const s: Q = { supportSsl: 1, mixedPlaylist: 1 };
     if (hls4) s.streamingType = hls4.id;
+    step = 'device/' + dev.id + '/settings';
     await kp.saveDeviceSettings(dev.id, s);
     log('device settings saved', dev.id, s);
   } catch (e) {
-    log('device settings failed', (e as Error).message);
+    log('device settings failed at', step + ':', (e as Error).message);
   }
 }

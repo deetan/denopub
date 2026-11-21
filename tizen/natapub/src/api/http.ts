@@ -1,4 +1,5 @@
 import { log } from '../log';
+import { S } from '../ui/strings';
 
 export class ApiError extends Error {
   code: number;
@@ -34,8 +35,8 @@ function xhr(r: Req): Promise<Resp> {
     Object.keys(h).forEach((k) => x.setRequestHeader(k, h[k]));
     x.timeout = 20000;
     x.onload = () => ok({ status: x.status, text: x.responseText });
-    x.onerror = () => fail(new ApiError(0, 'Нет сети (' + shortPath(r.url) + ')'));
-    x.ontimeout = () => fail(new ApiError(0, 'kino.pub не отвечает (таймаут)'));
+    x.onerror = () => fail(new ApiError(0, S.noNetwork(shortPath(r.url))));
+    x.ontimeout = () => fail(new ApiError(0, S.notRespondingTimeout));
     x.send(r.body || null);
   });
 }

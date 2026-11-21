@@ -4,7 +4,8 @@ import { isSerial } from '../api/models';
 import type { Item, Video } from '../api/models';
 import * as repo from '../data/repo';
 import type { ResumeTarget } from '../data/repo';
-import { formatMinutes, splitTitle } from '../format';
+import { displayTitle, otherTitle } from '../format';
+import { S, formatMinutes } from './strings';
 import { KEY, Press, useKeys } from '../keys';
 import type { KeyEv } from '../keys';
 import { log } from '../log';
@@ -82,7 +83,7 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
         setError(null);
       }, (e) => {
         if (!alive) return;
-        setError((e as Error).message || 'kino.pub не отвечает');
+        setError((e as Error).message || S.notResponding0);
         log('details', id, 'load failed:', (e as Error).message);
         if (itemRef.current) return; // a failed re-read keeps the page as it was
         timer = window.setTimeout(function again() {
@@ -147,7 +148,7 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
   useVScroll(track, [fr.key, col, season, item, similar.length], 16, () => (serial ? null : fr.key === 'similar' ? null : 0));
 
   function act(done: string, block: () => Promise<unknown>) {
-    block().then(() => showToast(done), (e) => showToast('Не получилось: ' + (e as Error).message)).then(() => setReloads((n) => n + 1));
+    block().then(() => showToast(done), (e) => showToast(S.failed((e as Error).message))).then(() => setReloads((n) => n + 1));
   }
 
   function focusRow(key: string, c?: number) {
@@ -177,12 +178,12 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
       if (col === 0) nav.play(resume || { itemId: it.id, season: seasons[0] ? seasons[0].number : null, episode: 1, startSec: 0 });
       else if (col === 1) {
         const on = wishlisted !== true;
-        act(on ? 'Добавлено в вишлист' : 'Убрано из вишлиста', async () => setWishlisted(await repo.setWishlisted(it.id, on)));
+        act(on ? S.addedToWishlist : S.removedFromWishlist, async () => setWishlisted(await repo.setWishlisted(it.id, on)));
       } else if (col === 2) {
-        act(watching ? 'Убрано из «Продолжить»' : 'Добавлено в «Продолжить»', () =>
+        act(watching ? S.removedFromContinue : S.addedToContinue, () =>
           watching ? repo.removeFromContinue(it.id) : repo.setWatching(it, true));
       } else if (col === 3) {
-        act(fullyWatched ? 'Отметка снята' : 'Отмечено просмотренным', () => repo.setItemWatched(it, !fullyWatched));
+        act(fullyWatched ? S.unmarked : S.markedWatched, () => repo.setItemWatched(it, !fullyWatched));
       }
     } else if (fr.key === 'seasons') setSeason(seasons[col].number);
     else if (fr.key.indexOf('ep') === 0) {
@@ -198,14 +199,14 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
       // Long-press a season chip: mark the whole season watched (or unwatched if it already is).
       const s = seasons[col];
       const done = s.episodes.every(watchedV);
-      act(done ? 'Сезон ' + s.number + ': отметка снята' : 'Сезон ' + s.number + ' просмотрен', () => repo.setSeasonWatched(it.id, s.number, !done));
+      act(done ? S.seasonUnmarked(s.number) : S.seasonWatched(s.number), () => repo.setSeasonWatched(it.id, s.number, !done));
     } else if (fr.key.indexOf('ep') === 0 && season != null) {
       // Long-press an episode: toggle "просмотрено" right away.
       const e = episodes.filter((x) => 'ep' + x.number === fr.key)[0];
       if (!e) return;
       const w = watchedV(e);
       const s = season;
-      act('S' + s + '·E' + e.number + (w ? ': отметка снята' : ' просмотрена'), () => repo.setEpisodeWatched(it.id, s, e.number, !w));
+      act(w ? S.episodeUnmarked('S' + s + '·E' + e.number) : S.episodeWatched('S' + s + '·E' + e.number), () => repo.setEpisodeWatched(it.id, s, e.number, !w));
     } else onClick();
   }
 
@@ -230,11 +231,11 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
     return (
       <div class="screen">
         <div class="center-msg">
-          {error == null ? <div class="t-body muted">Загрузка…</div> : (
+          {error == null ? <div class="t-body muted">{S.loading}</div> : (
             <div>
               <div class="t-body clamp3" style={{ color: 'var(--badge)', maxWidth: '700px' }}>{error.substr(0, 200)}</div>
-              <div class="t-label muted" style={{ marginTop: '16px' }}>Пробую ещё раз сам…</div>
-              <div class="btn fill f" style={{ marginTop: '16px' }}>Повторить</div>
+              <div class="t-label muted" style={{ marginTop: '16px' }}>{S.retrying}</div>
+              <div class="btn fill f" style={{ marginTop: '16px' }}>{S.retry}</div>
             </div>
           )}
         </div>
@@ -242,19 +243,20 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
     );
   }
 
-  const [titleRu, titleOrig] = splitTitle(item.title);
+  const titleRu = displayTitle(item.title);
+  const titleOrig = otherTitle(item.title);
   const facts = [
     titleOrig,
     item.year ? String(item.year) : null,
     item.imdb_rating ? 'IMDb ' + item.imdb_rating.toFixed(1) : null,
-    item.kinopoisk_rating ? 'КП ' + item.kinopoisk_rating.toFixed(1) : null,
+    item.kinopoisk_rating ? S.kp + ' ' + item.kinopoisk_rating.toFixed(1) : null,
     item.quality ? (item.quality >= 2160 ? '4K' : item.quality + 'p') : null,
   ].filter(Boolean).join('  ·  ');
   const r = resume;
-  const playLabel = !r ? 'Смотреть'
-    : r.season != null && r.startSec > 0 ? 'Продолжить S' + r.season + '·E' + r.episode + ' с ' + formatMinutes(r.startSec)
-      : r.season != null ? 'Смотреть S' + r.season + '·E' + r.episode
-        : r.startSec > 0 ? 'Продолжить с ' + formatMinutes(r.startSec) : 'Смотреть';
+  const playLabel = !r ? S.play
+    : r.season != null && r.startSec > 0 ? S.resumeEp(r.season, r.episode, r.startSec)
+      : r.season != null ? S.playEp(r.season, r.episode)
+        : r.startSec > 0 ? S.resumeAt(r.startSec) : S.play;
   const isF = (key: string, c = 0) => fr.key === key && col === c;
   const btn = (c: number, label: string, fill = false) => (
     <div class={'btn ' + (fill ? 'fill' : 'outline') + (isF('actions', c) ? ' f' : '')}>{label}</div>
@@ -280,20 +282,20 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
       <ChipRow id={'d:' + id + ':actions'} focusKey={fr.key + col} viewW={864}>
         <div class="btnrow" style={{ display: 'flex', padding: '0 6px' }}>
           {btn(0, playLabel, true)}
-          {btn(1, wishlisted === true ? 'В вишлисте ✓' : 'В вишлист')}
-          {btn(2, watching ? 'Смотрю ✓' : 'Начал смотреть')}
-          {btn(3, fullyWatched ? 'Просмотрено ✓' : 'Отметить просмотренным')}
+          {btn(1, wishlisted === true ? S.inWishlist : S.toWishlist)}
+          {btn(2, watching ? S.watchingOn : S.startedWatching)}
+          {btn(3, fullyWatched ? S.watchedOn : S.markWatched)}
         </div>
       </ChipRow>
     </div>
   );
   const similarRow = similar.length ? (
     <div data-similar style={{ marginTop: '16px' }} class={fr.key === 'similar' ? 'f' : ''}>
-      <div class="t-title" style={{ marginBottom: '6px' }}>Похожие</div>
+      <div class="t-title" style={{ marginBottom: '6px' }}>{S.similar}</div>
       <div style={{ padding: '8px 0' }}>
         <FixedRow id={'d:' + id + ':similar'} items={similar} width={110} gap={16} padH={8} focus={fr.key === 'similar' ? col : null}
           render={(s, _i, focused) => (
-            <PosterCard title={splitTitle(s.title)[0]} image={s.posters ? s.posters.medium : null} width={110} focused={focused} serial={isSerial(s)}
+            <PosterCard title={displayTitle(s.title)} image={s.posters ? s.posters.medium : null} width={110} focused={focused} serial={isSerial(s)}
               subtitle={[s.year ? String(s.year) : null, s.imdb_rating ? 'IMDb ' + s.imdb_rating.toFixed(1) : null].filter(Boolean).join(' · ')} />
           )} />
       </div>
@@ -311,7 +313,7 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
               <div class="chiprow" style={{ display: 'flex', padding: '0 20px' }}>
                 {seasons.map((s, i) => {
                   const left = s.episodes.filter((e) => !watchedV(e)).length;
-                  const label = 'Сезон ' + s.number + (left === 0 ? ' ✓' : '');
+                  const label = S.season(s.number) + (left === 0 ? ' ✓' : '');
                   return <div key={s.number} class={'btn ' + (s.number === season ? 'fill' : 'outline') + (isF('seasons', i) ? ' f' : '')}>{label}</div>;
                 })}
               </div>
@@ -325,9 +327,9 @@ export function Details({ nav, active, id }: { nav: Nav; active: boolean; id: nu
                 return (
                   <div key={e.id} class={'ep' + (isResume ? ' sel' : '') + (fr.key === 'ep' + e.number ? ' f' : '')}>
                     <div class="body">
-                      <div class="t-title ell" style={{ fontSize: '16px' }}>{e.number}. {e.title && e.title.trim() ? e.title : 'Серия ' + e.number}</div>
+                      <div class="t-title ell" style={{ fontSize: '16px' }}>{e.number}. {e.title && e.title.trim() ? displayTitle(e.title) : S.episode(e.number)}</div>
                       <div class="sup">
-                        {st === 1 ? 'просмотрено' : st === 0 ? 'остановились на ' + formatMinutes((e.watching && e.watching.time) || 0) + ' из ' + formatMinutes(e.duration) : formatMinutes(e.duration)}
+                        {st === 1 ? S.watched : st === 0 ? S.stoppedAt((e.watching && e.watching.time) || 0, e.duration) : formatMinutes(e.duration)}
                       </div>
                       {st === 0 && e.duration > 0 ? (
                         <div style={{ marginTop: '4px', width: '50%' }}><ProgressLine progress={((e.watching && e.watching.time) || 0) / e.duration} height={3} /></div>

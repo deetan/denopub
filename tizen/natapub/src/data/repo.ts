@@ -274,11 +274,13 @@ async function wishlistFolder(): Promise<number> {
     id = created ? created.id : (await kp.bookmarkFolders()).filter((f) => f.title === WISHLIST_TITLE)[0].id;
   }
   wishlistFolderId = id;
+  log('wishlist: folder', id, found ? '"' + found.title + '"' : '(created)', 'of', folders.length, 'folders');
   return id;
 }
 
 export async function wishlist(): Promise<WishlistEntry[]> {
   const items = await kp.bookmarkItems(await wishlistFolder());
+  log('wishlist:', items.length, 'items');
   const seen = prefs.seenWishlist();
   return items.map((item) => ({ item, isNew: seen.indexOf(item.id) < 0 }));
 }
@@ -383,4 +385,19 @@ export async function removeFromContinue(id: number): Promise<void> {
   } catch (e) {
     log('removeFromContinue: unsubscribe failed', (e as Error).message);
   }
+}
+
+// ---------- search ----------
+
+/** kino.pub search; 3D releases are separate items (type "3D") the owner never wants on the TV. */
+export async function search(query: string, type: 'movie' | 'serial' | null): Promise<Item[]> {
+  const items = await kp.search(query);
+  return items.filter((it) => {
+    const is3d = (it.type || '').toLowerCase() === '3d';
+    if (is3d) log('search: hid 3D', it.id, it.title);
+    if (is3d) return false;
+    if (type === 'serial') return isSerial(it);
+    if (type === 'movie') return !isSerial(it);
+    return true;
+  });
 }

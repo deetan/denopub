@@ -15,6 +15,7 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 4. Asked to make a copy for someone else ("сделай так же")? → **`REPLICATE.md`**.
 5. Code: `data/Repository.kt` → `ui/home/HomeScreen.kt` → `ui/player/PlayerController.kt` →
    `ui/player/PlayerScreen.kt` → `ui/details/DetailsScreen.kt`.
+6. Samsung TV port (**Natapub**, Tizen web app in `tizen/`)? → **`tizen/README.md`** → `tizen/natapub/README.md`.
 
 ## Mental model
 

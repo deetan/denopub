@@ -2,6 +2,7 @@ import type { ComponentChildren, VNode } from 'preact';
 import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { KEY, Press, useKeys } from '../keys';
 import type { KeyEv } from '../keys';
+import { S } from './strings';
 
 export function Badge({ text, style }: { text: string; style?: Record<string, string | number> }) {
   return <span class="badge" style={style}>{text}</span>;
@@ -32,7 +33,7 @@ export function PosterCard(p: {
         <div class="clip">
           <Img src={p.image} />
           {p.badge ? <span class="badge" style={{ position: 'absolute', right: '6px', top: '6px' }}>{p.badge}</span> : null}
-          {p.serial ? <span class="serial-tag">сериал</span> : null}
+          {p.serial ? <span class="serial-tag">{S.seriesTag}</span> : null}
         </div>
       </div>
       <div class="cap t-body ell">{p.title}</div>
