@@ -47,6 +47,7 @@ data class Forecast(
     val windFrom: Int? = null,         // degrees the wind blows FROM
     val aqi: Int? = null,              // US AQI now (0–500, as IQAir etc. show it; Open-Meteo / CAMS model, hourly)
     val pm25: Double? = null,
+    val humidity: Int? = null,         // relative humidity now, %
 )
 
 /**
@@ -90,6 +91,7 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
             parse(o, place).copy(
                 aqi = if (ground != null) usAqi(ground) else air?.get("us_aqi")?.jsonPrimitive?.doubleOrNull?.roundToInt(),
                 pm25 = pm25,
+                humidity = rh?.roundToInt(),
             ).also {
                 cached = it
                 cacheFile.writeText(json.encodeToString(Forecast.serializer(), it))

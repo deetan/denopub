@@ -52,11 +52,11 @@ kino.pub for HEVC, 4K and HDR streams and uses a SurfaceView so HDR10 and Dolby 
 **Paintings screensaver** («Картины»): the TV's screensaver shows famous paintings, classic to
 contemporary, full-screen with a slow pan/zoom and cross-fades. A few seconds into each one a caption
 rises — title in Russian and English, artist with life dates, date, museum — then a short story
-written for a child, and the picture is left clean again before the next. A painting stays 40 s; a
+written for a child, and the picture is left clean again before the next. A painting stays 30 s; a
 thin bar along the bottom edge shows when the next one comes. The painting moves aside for the caption
 (beside or above it), so the text doesn't cover it. ← → previous/next, ↑ ↓ hide
 or show the caption, any other key wakes the TV. A band across the top shows the time and the weather (now, the next hours, tomorrow
-morning/day/evening: cloudiness, temperature, precipitation; Open-Meteo, Belgrade by default, follows the
+morning/day/evening: cloudiness, temperature, chance of rain and amount; wind, humidity and air now; Open-Meteo, Belgrade by default, follows the
 TV's IP location when it is elsewhere). The same show opens from Home's «Картины» button.
 The catalog (`app/src/main/assets/art/paintings.json`, texts only) is re-read from GitHub `main`
 daily, so adding paintings needs no release; images load by URL (Wikimedia Commons, or a direct URL

@@ -194,7 +194,7 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   one); dealt from a persisted shuffled deck (no repeats until all shown). Images: Commons
   `Special:FilePath?width=` 1280 (portrait) / 1920 / 3840 (panorama) with a descriptive User-Agent;
   copyrighted 20th-century works by direct URL (owner accepted that) — never store images in the
-  repo. One painting = 40 s (owner 2026-11-15: 60 s too slow, 30 s too short for the child to read): 2 s
+  repo. One painting = 30 s (owner 2026-11-21; was 40 s): 2 s
   clean → title block → story at 4 s → clean for the last 4 s; a 4 dp white bar along the bottom fills
   until the switch (restarts on ← →); the next painting is dealt and pre-loaded into Coil's cache so the
   switch lands on time; 2.5 s cross-fade. **Text never covers the painting if it can help it** (owner
@@ -210,10 +210,10 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   Enable on a device: `scripts/tv.sh screensaver`. Maintain: `scripts/art-catalog.py`.
 - **Weather band on the paintings** (`data/Weather.kt`, `TopBar` in `ArtShow.kt`, owner 2026-11-15): a
   58 dp band across the top (the painting and caption are laid out below it): clock, «Сейчас» + wind
-  («💨 8–14 м/с ↖»: speed–gusts, arrow = where it blows to) + air («AQI 87 · умеренно · PM2.5 15», US AQI
+  and humidity («💨 8–14 м/с ↖  💧72%»: speed–gusts, arrow = where it blows to) + air («AQI 87 · умеренно · PM2.5 15», US AQI
   0–500 as IQAir shows it — the owner asked for that index, not the European one), then +3/+6 h, then
   завтра утро 09:00 / день 14:00 / вечер 19:00 — emoji icon (WMO code for rain/snow/storm/fog, else cloud
-  cover), temperature, precipitation (mm if ≥ 0.1, else probability ≥ 10 %). The band is exactly one
+  cover), temperature, mm if ≥ 0.1; chance of rain always, on the label line («15:00 ☔40%», owner 2026-11-21 — that line is narrower than the icon row). The band is exactly one
   1080p row wide: adding a cell means removing one (it overflowed twice). Open-Meteo forecast + air-quality
   API (keyless). Air = **PM2.5 of outdoor Sensor.Community sensors within 3 km, figure-skating style** (≥ 3 needed; lowest and highest dropped, the rest averaged — one near Palilula reads ~170 while neighbours read 5–12), humidity-corrected (κ-Köhler, `Weather.humidityCorrected`, RH from Open-Meteo — cheap sensors read 1.5–3× high in fog), converted to US AQI (EPA 2024 breakpoints, `Weather.usAqi`); fewer sensors → the CAMS model (hourly), refreshed ≤ every 15 min, cached in
   `filesDir/weather.json`. Location: Belgrade, Palilula (44.82, 20.49 — rounded on purpose, public repo);

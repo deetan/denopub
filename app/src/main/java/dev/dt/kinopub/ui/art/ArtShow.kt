@@ -93,7 +93,7 @@ private class Slide(val painting: Painting, val image: ImageBitmap, val serial: 
 }
 
 /** How long one painting stays (the caption shows during the middle part). */
-private const val SLIDE_MS = 40_000L   // owner 2026-11-15: 60 s too slow, 30 s too short for the child to read
+private const val SLIDE_MS = 30_000L   // owner 2026-11-21: 30 s (was 40 s; 60 s too slow)
 private const val FADE_MS = 2_500
 
 /**
@@ -404,7 +404,7 @@ private val barSmall = TextStyle(color = Color.White.copy(alpha = 0.75f), fontSi
 
 /**
  * Clock and weather (owner 2026-11-15): now, in 2/4/6 hours, tomorrow morning/day/evening — icon for
- * cloudiness/rain/snow, temperature, chance (or amount) of precipitation.
+ * cloudiness/rain/snow, temperature, chance of rain (+ amount when ≥ 0.1 mm); humidity next to the wind.
  */
 @Composable
 private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
@@ -427,7 +427,7 @@ private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
                 f.windMs?.let { w ->
                     // "8–15 м/с": wind, then gusts if notably stronger.
                     val gust = f.gustMs?.takeIf { it >= w + 2 }?.let { "–${it.roundToInt()}" } ?: ""
-                    BasicText("💨 ${w.roundToInt()}$gust м/с${f.windFrom?.let { " " + Weather.windArrow(it) } ?: ""}", style = barSmall, softWrap = false)
+                    BasicText("💨 ${w.roundToInt()}$gust м/с${f.windFrom?.let { " " + Weather.windArrow(it) } ?: ""}${f.humidity?.let { "  💧$it%" } ?: ""}", style = barSmall, softWrap = false)
                 }
                 f.aqi?.let { q ->
                     val (word, color) = Weather.aqiLevel(q)
@@ -441,9 +441,9 @@ private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
         }
         f.hours.forEach { Spacer(Modifier.width(12.dp)); WeatherCell(it) }
         if (f.tomorrow.isNotEmpty()) {
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(12.dp))
             Box(Modifier.width(1.dp).height(34.dp).background(Color.White.copy(alpha = 0.3f)))
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(12.dp))
             f.tomorrow.forEachIndexed { i, slot ->
                 if (i > 0) Spacer(Modifier.width(12.dp))
                 WeatherCell(if (i == 0) slot.copy(label = "завтра ${slot.label}") else slot)
@@ -455,19 +455,22 @@ private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
 
 @Composable
 private fun WeatherCell(s: WeatherSlot, big: Boolean = false, showLabelAbove: Boolean = true) {
-    val precip = when {
-        s.precipMm >= 0.1 -> "%.1fмм".format(s.precipMm).replace('.', ',')
-        s.precipProb != null && s.precipProb >= 10 -> "${s.precipProb}%"
-        else -> null
-    }
+    // Chance of rain always (owner 2026-11-21). It sits on the label line, which is narrower than the
+    // icon + temperature row, and the amount (≥ 0.1 mm) stays on that row: the band is one 1080p row wide.
+    val prob = s.precipProb?.let { "☔$it%" }
+    val mm = s.precipMm.takeIf { it >= 0.1 }?.let { "%.1fмм".format(it).replace('.', ',') }
     Column {
-        if (showLabelAbove) BasicText(s.label, style = barLabel)
+        if (showLabelAbove) Row(verticalAlignment = Alignment.CenterVertically) {
+            BasicText(s.label, style = barLabel, softWrap = false)
+            if (prob != null) { Spacer(Modifier.width(4.dp)); BasicText(prob, style = barSmall, softWrap = false, maxLines = 1) }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (!showLabelAbove) { BasicText(s.label, style = barSmall, softWrap = false); Spacer(Modifier.width(3.dp)) }
             BasicText(Weather.icon(s), style = barValue.copy(fontSize = if (big) 19.sp else 15.sp))
             Spacer(Modifier.width(3.dp))
             BasicText("${if (s.temp > 0) "+" else ""}${s.temp}°", style = barValue.copy(fontSize = if (big) 19.sp else 15.sp))
-            if (precip != null) { Spacer(Modifier.width(3.dp)); BasicText("💧$precip", style = barSmall, softWrap = false, maxLines = 1) }
+            if (mm != null) { Spacer(Modifier.width(3.dp)); BasicText(mm, style = barSmall, softWrap = false, maxLines = 1) }
+            if (!showLabelAbove && prob != null) { Spacer(Modifier.width(3.dp)); BasicText(prob, style = barSmall, softWrap = false, maxLines = 1) }
         }
     }
 }
