@@ -1,0 +1,151 @@
+/*
+ * Design tokens and shapes ported from ui/theme/Theme.kt and ui/common/Cards.kt.
+ * Every size here is in Android dp/sp: #app is laid out at 960×540 (Android TV's dp canvas) and
+ * zoomed to the real window (×2 on the 1920×1080 TV canvas), so numbers match the Kotlin code.
+ * Chromium 63: no flex `gap`, no `aspect-ratio`, no `inset` — margins and explicit sizes only.
+ */
+@font-face { font-family: 'Roboto'; font-weight: 400; src: url(../../node_modules/@fontsource/roboto/files/roboto-cyrillic-400-normal.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Roboto'; font-weight: 500; src: url(../../node_modules/@fontsource/roboto/files/roboto-cyrillic-500-normal.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Roboto'; font-weight: 600; src: url(../../node_modules/@fontsource/roboto/files/roboto-cyrillic-600-normal.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Roboto'; font-weight: 400; src: url(../../node_modules/@fontsource/roboto/files/roboto-latin-400-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Roboto'; font-weight: 500; src: url(../../node_modules/@fontsource/roboto/files/roboto-latin-500-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Roboto'; font-weight: 600; src: url(../../node_modules/@fontsource/roboto/files/roboto-latin-600-normal.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
+:root {
+  --bg: #0E0F12;
+  --surface: #1A1C21;
+  --surfaceHi: #262931;
+  --accent: #F2B33D;
+  --onAccent: #14161A;
+  --text: #EDEEF0;
+  --muted: #9AA0A6;
+  --badge: #E5484D;
+}
+
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #0E0F12; overflow: hidden; }
+#app {
+  position: absolute; left: 0; top: 0; width: 960px; height: 540px; overflow: hidden;
+  background: var(--bg); color: var(--text);
+  font-family: 'Roboto', 'SamsungOne', 'Tizen Sans', sans-serif; font-size: 15px; line-height: 1.2;
+  -webkit-font-smoothing: antialiased; cursor: none;
+}
+* { box-sizing: border-box; }
+.screen { position: absolute; left: 0; top: 0; width: 960px; height: 540px; overflow: hidden; background: var(--bg); }
+.hidden { display: none; }
+
+/* Typography (Theme.kt) */
+.t-display { font-size: 36px; font-weight: 600; }
+.t-headline { font-size: 24px; font-weight: 600; }
+.t-titleL { font-size: 22px; font-weight: 400; }
+.t-title { font-size: 18px; font-weight: 500; }
+.t-body { font-size: 15px; font-weight: 400; }
+.t-label { font-size: 13px; font-weight: 500; }
+.t-labelS { font-size: 11px; font-weight: 500; }
+.muted { color: var(--muted); }
+.ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clamp2, .clamp3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp2 { -webkit-line-clamp: 2; }
+.clamp3 { -webkit-line-clamp: 3; }
+
+/* Cards: 8dp corners, 3dp accent border + zoom on focus (transform only) */
+.card { position: relative; border-radius: 8px; background: var(--surface); transition: transform 150ms ease-out; flex: none; }
+.card .clip { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 8px; overflow: hidden; }
+.card.f { z-index: 2; }
+.card.f::after { content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; border: 3px solid var(--accent); border-radius: 8px; }
+.poster .card.f { transform: scale(1.06); }
+.ccard.f { transform: scale(1.05); }
+.img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }
+.grad-bottom { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: linear-gradient(to bottom, transparent 35%, rgba(0,0,0,.92) 100%); }
+
+.badge { display: inline-block; border-radius: 4px; background: var(--badge); color: #fff; padding: 2px 6px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.serial-tag { position: absolute; left: 6px; bottom: 6px; border-radius: 4px; background: rgba(0,0,0,.55); color: rgba(255,255,255,.8); padding: 1px 5px; font-size: 11px; font-weight: 500; }
+.progress { position: relative; width: 100%; height: 4px; background: rgba(255,255,255,.18); overflow: hidden; }
+.progress > div { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+
+.poster { flex: none; }
+.poster .cap { margin-top: 8px; }
+
+/* Rows */
+.row-track { display: flex; flex-wrap: nowrap; align-items: flex-start; transition: transform 200ms ease-out; will-change: transform; }
+.vtrack { transition: transform 220ms ease-out; will-change: transform; position: relative; }
+
+/* Home */
+.hero { position: relative; width: 960px; height: 92px; overflow: hidden; }
+.hero .shade { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: linear-gradient(to right, #0E0F12 0%, rgba(14,15,18,.85) 60%, rgba(14,15,18,.35) 100%); }
+.hero .content { position: absolute; left: 48px; right: 200px; bottom: 4px; display: flex; align-items: flex-end; }
+.section-title { display: flex; align-items: center; padding: 0 48px; margin-bottom: 12px; }
+.section-title > * + * { margin-left: 12px; }
+
+/* Buttons (tv-material3 Button / OutlinedButton approximations) */
+.btn { display: inline-block; flex: none; height: 40px; line-height: 40px; padding: 0 20px; border-radius: 20px; font-size: 14px; font-weight: 500; white-space: nowrap; transition: transform 150ms ease-out; }
+.btn.fill { background: rgba(237,238,240,.8); color: var(--surface); }
+.btn.outline { border: 2px solid var(--surfaceHi); line-height: 36px; color: var(--text); }
+.btn.f { background: var(--text); color: #1A1C21; border-color: var(--text); transform: scale(1.1); }
+
+/* Long-press menu (ActionMenu.kt) */
+.scrim { position: absolute; left: 0; top: 0; width: 960px; height: 540px; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.menu { width: 520px; border-radius: 12px; background: var(--surface); padding: 16px; }
+.menu .mtitle { padding: 0 0 8px 12px; }
+.menu .mitem { border-radius: 8px; padding: 10px 12px; margin-top: 4px; }
+.menu .mitem .hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.menu .mitem.f { background: var(--accent); color: var(--onAccent); }
+.menu .mitem.f .hint { color: var(--onAccent); opacity: .75; }
+
+.toast { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--surfaceHi); border-radius: 8px; padding: 10px 16px; font-size: 15px; white-space: nowrap; z-index: 60; }
+.toast.big { bottom: 40px; border-radius: 10px; padding: 12px 20px; font-size: 18px; font-weight: 500; }
+.center-msg { position: absolute; left: 0; top: 0; width: 960px; height: 540px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+
+/* Title card (DetailsScreen.kt) */
+.details { padding: 27px 48px 0 48px; display: flex; flex-direction: column; }
+.details .head { display: flex; flex: none; }
+.details .head .pimg { position: relative; width: 110px; height: 165px; border-radius: 8px; overflow: hidden; background: var(--surface); flex: none; margin-right: 28px; }
+.details .info { min-width: 0; flex: 1; }
+.details .info > * + * { margin-top: 8px; }
+.plot { border-radius: 8px; padding: 4px 8px; margin-left: -8px; }
+.plot.f { background: var(--surfaceHi); }
+.plot .ru { color: rgba(237,238,240,.85); }
+.btnrow > * + * { margin-left: 12px; }
+.chiprow > * + * { margin-left: 10px; }
+.eps { flex: 1; min-height: 0; overflow: hidden; margin-top: 6px; position: relative; }
+.ep { display: flex; align-items: center; border-radius: 8px; padding: 8px 16px; margin-bottom: 2px; transition: transform 150ms ease-out; }
+.ep .body { flex: 1; min-width: 0; }
+.ep .sup { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ep.sel { background: var(--surfaceHi); }
+.ep.f { background: var(--text); color: #1A1C21; transform: scale(1.02); }
+.ep.f .sup { color: #3b3f46; }
+.ep .tick { color: var(--accent); font-size: 18px; margin-left: 12px; }
+.plotdlg { width: 900px; max-height: 480px; border-radius: 12px; background: var(--surface); padding: 28px; overflow: hidden; }
+
+/* Player (PlayerScreen.kt) */
+.player { background: #000; }
+.player video { position: absolute; left: 0; top: 0; width: 960px; height: 540px; background: #000; }
+.fade { opacity: 0; transition: opacity 400ms ease-out; pointer-events: none; }
+.fade.show { opacity: 1; transition-duration: 150ms; }
+.bigpause { position: absolute; left: 0; top: 0; width: 960px; height: 540px; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; font-size: 120px; color: rgba(255,255,255,.9); }
+.bigpause.fade { transition-duration: 700ms; }
+.cornerpause { position: absolute; top: 28px; right: 36px; font-size: 26px; color: rgba(255,255,255,.8); border-radius: 8px; background: rgba(0,0,0,.4); padding: 4px 12px; }
+.jumpbar { position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 48px; background: linear-gradient(to bottom, transparent, rgba(0,0,0,.5)); }
+.topbar { position: absolute; left: 0; right: 0; top: 0; padding: 14px 48px; background: rgba(0,0,0,.55); transform: translateY(-100%); opacity: 0; transition: transform 200ms ease-out, opacity 200ms ease-out; }
+.topbar.show { transform: none; opacity: 1; }
+.osd { position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 48px; background: rgba(0,0,0,.6); transform: translateY(100%); opacity: 0; transition: transform 220ms ease-out, opacity 220ms ease-out; }
+.osd.show { transform: none; opacity: 1; }
+.osd > * + * { margin-top: 10px; }
+.seekbar { position: relative; height: 24px; }
+.seekbar .progress { position: absolute; left: 0; top: 50%; transform: translateY(-50%); }
+.seekbar .mark { position: absolute; top: 1px; width: 4px; height: 22px; background: #fff; }
+.seekbar .mark.scrub { background: var(--accent); }
+.spread { display: flex; justify-content: space-between; align-items: center; }
+.panel { border-radius: 10px; background: rgba(26,28,33,.92); padding: 16px; }
+.panel .prow { display: flex; align-items: center; }
+.panel .prow + .prow { margin-top: 10px; }
+.panel .plabel { width: 96px; flex: none; }
+.panel .pbody { flex: 1; min-width: 0; overflow: hidden; padding: 4px 6px; }
+.chip { flex: none; height: 32px; line-height: 30px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--surfaceHi); color: var(--muted); font-size: 14px; font-weight: 500; white-space: nowrap; margin-right: 12px; }
+.chip.sel { background: var(--surfaceHi); color: var(--text); }
+.chip.f { background: var(--accent); color: var(--onAccent); border-color: var(--accent); }
+.tile { position: relative; width: 208px; height: 117px; border-radius: 8px; overflow: hidden; background: var(--surfaceHi); flex: none; }
+.tile.f::after { content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; border: 3px solid var(--accent); border-radius: 8px; }
+.tile .grad { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: linear-gradient(to bottom, transparent 30%, rgba(0,0,0,.9) 100%); }
+.tile .tcap { position: absolute; left: 6px; top: 6px; border-radius: 4px; background: rgba(0,0,0,.55); padding: 2px 6px; font-size: 13px; font-weight: 500; color: #fff; }
+.tile .tbottom { position: absolute; left: 0; right: 0; bottom: 0; }
+.err { position: absolute; left: 0; top: 0; width: 960px; height: 540px; display: flex; align-items: center; justify-content: center; color: var(--badge); }
