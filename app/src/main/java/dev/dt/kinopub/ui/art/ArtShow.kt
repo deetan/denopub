@@ -93,7 +93,7 @@ private class Slide(val painting: Painting, val image: ImageBitmap, val serial: 
 }
 
 /** How long one painting stays (the caption shows during the middle part). */
-private const val SLIDE_MS = 30_000L   // owner 2026-11-21: 30 s (was 40 s; 60 s too slow)
+private const val SLIDE_MS = 40_000L   // owner 2026-11-22: 40 s on both platforms (was 30 s; 60 s too slow)
 private const val FADE_MS = 2_500
 
 /**

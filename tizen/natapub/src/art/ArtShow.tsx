@@ -15,8 +15,8 @@ import { artistLine, imageUrl, isPanorama, type Painting } from './painting';
 import { aqiLevel, getForecast, icon, lastForecast, windArrow, type Forecast, type WeatherSlot } from './weather';
 import './art.css';
 
-/** How long one painting stays (Natapub, owner 2026-11-21: 30 s; Android keeps 40 s). */
-const SLIDE_MS = 30000;
+/** How long one painting stays (owner 2026-11-22: 40 s, same as Android; was 30 s). */
+const SLIDE_MS = 40000;
 const FADE_MS = 2500;
 const ROOM_MS = 900;
 /** Clock + weather band height; the painting and its caption are laid out below it. */
