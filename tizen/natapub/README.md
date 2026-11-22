@@ -71,6 +71,12 @@ scripts/check-dist.mjs  fails the build on syntax/APIs/CSS newer than Chrome 63
   the OSD when it is open — Chromium 63's own drawing kept its 27 px line step at smaller sizes and
   honoured cue line positions, so lines sat far apart, one in the letterbox). Voiceover labels come from kino.pub `audios[]`, matched by the "NN." prefix of the
   rendition name.
+- **Buffering** (`player/buffering.ts`, 2026-11-22: short freezes when kino.pub lags): ahead =
+  max(30 s, 8 × 100 MB / bitrate), at most 120 s — about 80–120 s at our H.264 ≤ 1080p bitrates (was
+  30–60 s at 40 MB); back buffer 10 s (it shares the TV's MSE quota). Fragment loads give up after 8 s
+  without a first byte or 40 s in all (hls.js default 120 s) and retry 6 / 8 times. Log: `buffer: stall
+  at … ahead … net …`, `buffer: stall resumed after N ms`, `buffer: slow main fragment N ms`; a
+  `bufferFullError` in `hls error` lines means the quota was hit (hls.js then halves the target).
 
 ## Dev loop
 

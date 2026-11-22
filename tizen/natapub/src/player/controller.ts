@@ -9,6 +9,7 @@ import type { TrackChoice } from '../data/prefs';
 import * as repo from '../data/repo';
 import type { ResumeTarget } from '../data/repo';
 import { log } from '../log';
+import { HLS_BUFFER, logStalls, slowFragLogger } from './buffering';
 import { segmentsFor, segText } from '../api/skip';
 import type { Segment } from '../api/skip';
 import { S } from '../ui/strings';
@@ -109,6 +110,7 @@ export class PlayerController {
 
   constructor(private video: HTMLVideoElement, start: ResumeTarget, private onUi: (ui: PlayerUi) => void) {
     this.current = start;
+    logStalls(video, () => this.hls);
     video.addEventListener('ended', () => this.onEnded());
     // A deliberate pause writes even at 1 s.
     video.addEventListener('pause', () => {
@@ -177,10 +179,7 @@ export class PlayerController {
     const video = this.video;
     if (url.indexOf('.m3u8') >= 0 && HlsCtor && HlsCtor.isSupported()) {
       const hls = new HlsCtor({
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 40 * 1000 * 1000,
-        backBufferLength: 30,
+        ...HLS_BUFFER,
         startPosition: posMs / 1000,
         capLevelToPlayerSize: false,
       });
@@ -192,6 +191,7 @@ export class PlayerController {
       hls.on(E.SUBTITLE_TRACKS_UPDATED, () => this.onSubtitleTracks());
       hls.on(E.SUBTITLE_TRACK_SWITCH, () => this.publishTracks());
       hls.on(E.ERROR, (_e, d) => this.onHlsError(d));
+      hls.on(E.FRAG_LOADED, slowFragLogger(video));
       hls.loadSource(url);
       hls.attachMedia(video);
     } else {
