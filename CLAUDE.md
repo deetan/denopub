@@ -215,14 +215,16 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   ↑ ↓ caption, anything else wakes. `art:` log lines name each painting / failed image (skipped).
   Enable on a device: `scripts/tv.sh screensaver`. Maintain: `scripts/art-catalog.py`.
 - **Weather band on the paintings** (`data/Weather.kt`, `TopBar` in `ArtShow.kt`, owner 2026-11-15): a
-  76 dp band across the top (the painting and caption are laid out below it): clock, «Сейчас» + wind
-  and humidity («💨 8–14 м/с ↖  💧72%»: speed–gusts, arrow = where it blows to) + air («AQI 87 · умеренно · PM2.5 15», US AQI
-  0–500 as IQAir shows it — the owner asked for that index, not the European one), then +3/+6 h, then
-  завтра утро 09:00 / день 14:00 / вечер 19:00 — emoji icon (WMO code for rain/snow/storm/fog, else cloud
-  cover), temperature, mm if ≥ 0.1; chance of rain always, on the label line («15:00 ☔40%», owner 2026-11-21 — that line is narrower than the icon row). The first line is exactly one
-  1080p row wide: adding a cell there means removing one (it overflowed twice). Under +3 h…вечер, a second
-  line with the next 4 days after tomorrow (owner 2026-11-22: «вт ☀ +6°/+1° ☔0%», mm if ≥ 1; Open-Meteo
-  `daily`, `Weather.DAYS`); it ends near the screen edge, so `FitRow` drops a last day that doesn't fit. Open-Meteo forecast + air-quality
+  58 dp band across the top, **one row** (the painting and caption are laid out below it): clock (city under
+  it when away), «Сейчас» + wind and humidity («💨 8–14 м/с ↖  💧72%»: speed–gusts, arrow = where it blows
+  to) + air («● AQI 87 · PM2.5 15», US AQI 0–500 as IQAir shows it — the owner asked for that index; the
+  dot's colour is the level, the word was dropped for room), then +3/+6 h | «пн утро» 09:00 / день 14:00 /
+  вечер 19:00 | the next days after tomorrow («вт ☔0%» over «☀ +6/+1°», Open-Meteo `daily`, up to
+  `Weather.DAYS` = 4; owner 2026-11-22: "ещё 3–4 дня, в одну строку, поплотнее" — a second line was
+  rejected). Cells: emoji icon (WMO code for rain/snow/storm/fog, else cloud cover), temperature, whole mm
+  if ≥ 1; chance of rain always, on the label line («15:00 ☔40%», owner 2026-11-21). The row is exactly
+  one 1080p width: the days sit in `FitRow`, which shows only the days that fit (3 on a rainy day with mm
+  everywhere, 4 on a dry one) — never let a cell run off the edge (it overflowed twice). Open-Meteo forecast + air-quality
   API (keyless). Air = **PM2.5 of outdoor Sensor.Community sensors within 3 km, figure-skating style** (≥ 3 needed; lowest and highest dropped, the rest averaged — one near Palilula reads ~170 while neighbours read 5–12), humidity-corrected (κ-Köhler, `Weather.humidityCorrected`, RH from Open-Meteo — cheap sensors read 1.5–3× high in fog), converted to US AQI (EPA 2024 breakpoints, `Weather.usAqi`); fewer sensors → the CAMS model (hourly), refreshed ≤ every 15 min, cached in
   `filesDir/weather.json`. Location: Belgrade, Palilula (44.82, 20.49 — rounded on purpose, public repo);
   ipwho.is once a day — used only if > 30 km from home (owner: "Палилула дефолт, а дальше по ип"); then the
@@ -403,3 +405,11 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 
 Commit after every meaningful change, with docs updated in the same commit, and push to
 `origin` = `github.com/deetan/denopub` (public since 2026-10-25, `main`; renamed from `kinopub-android-tv` 2026-10-25 — the old URL redirects). The local checkout stays at `~/Projects/kinopub-android-tv`.
+
+**Everything goes into `main`** (owner, 2026-11-22). Finished work — a session worktree branch, a PR from
+a contributor's fork (Nata, `billecart`) — is merged to `main` without asking (rebase merge keeps the
+author) and pushed; then fast-forward the main folder (`git -C ~/Projects/kinopub-android-tv merge
+--ff-only origin/main`). No finished work left on side branches. `main` is checked out in the main folder,
+so a worktree works on a temp branch from `origin/main` and pushes with `git push origin HEAD:main`.
+Without write access to `deetan/denopub` (a fork), open a PR instead. Publishing a release
+(`scripts/release.sh`) stays a separate, ask-first step.

@@ -396,7 +396,7 @@ private fun Caption(p: Painting, phase: Int, on: Boolean, place: Place, modifier
 }
 
 /** Height of the clock + weather band at the top. */
-private const val TOP_BAR = 76f
+private const val TOP_BAR = 58f
 
 private val barLabel = TextStyle(color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, shadow = Shadow(Color.Black, blurRadius = 8f))
 private val barValue = TextStyle(color = Color.White, fontSize = 17.sp, shadow = Shadow(Color.Black, blurRadius = 8f))
@@ -404,8 +404,8 @@ private val barSmall = TextStyle(color = Color.White.copy(alpha = 0.75f), fontSi
 
 /**
  * Clock and weather (owner 2026-11-15): now, in 3/6 hours, tomorrow morning/day/evening — icon for
- * cloudiness/rain/snow, temperature, chance of rain (+ amount when ≥ 0.1 mm); humidity next to the wind;
- * under the hours, the next [Weather.DAYS] days (max/min, chance of rain).
+ * cloudiness/rain/snow, temperature, chance of rain (+ amount when ≥ 1 mm); humidity next to the wind;
+ * then the next [Weather.DAYS] days (max/min, chance of rain), all in one row.
  */
 @Composable
 private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
@@ -414,16 +414,20 @@ private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
     val fmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     Row(
         modifier.background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.45f), 1f to Color.Transparent))
-            .padding(start = 48.dp, end = 20.dp, top = 8.dp),
+            .padding(start = 36.dp, end = 12.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText(fmt.format(now), style = TextStyle(color = Color.White.copy(alpha = 0.85f), fontSize = 30.sp, fontWeight = FontWeight.Light, shadow = Shadow(Color.Black, blurRadius = 8f)))
+        Column {
+            BasicText(fmt.format(now), style = TextStyle(color = Color.White.copy(alpha = 0.85f), fontSize = 28.sp, fontWeight = FontWeight.Light, shadow = Shadow(Color.Black, blurRadius = 8f)))
+            // Away from home (IP > 30 km): the city under the clock — the row's end is taken by the days.
+            f?.place?.let { BasicText(it, style = barLabel, softWrap = false, maxLines = 1) }
+        }
         if (f == null) return@Row
-        Spacer(Modifier.width(18.dp))
+        Spacer(Modifier.width(14.dp))
         WeatherCell(f.now, big = true)
         // Wind and air quality, now only (owner 2026-11-15).
         if (f.windMs != null || f.aqi != null) {
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Column {
                 f.windMs?.let { w ->
                     // "8–15 м/с": wind, then gusts if notably stronger.
@@ -431,38 +435,32 @@ private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
                     BasicText("💨 ${w.roundToInt()}$gust м/с${f.windFrom?.let { " " + Weather.windArrow(it) } ?: ""}${f.humidity?.let { "  💧$it%" } ?: ""}", style = barSmall, softWrap = false)
                 }
                 f.aqi?.let { q ->
-                    val (word, color) = Weather.aqiLevel(q)
+                    // The dot's colour is the level; the word ("хорошо") was dropped to fit the days.
+                    val color = Weather.aqiLevel(q).second
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(7.dp).background(Color(color), androidx.compose.foundation.shape.CircleShape))
                         Spacer(Modifier.width(4.dp))
-                        BasicText("AQI $q · $word${f.pm25?.let { " · PM2.5 ${it.roundToInt()}" } ?: ""}", style = barSmall, softWrap = false)
+                        BasicText("AQI $q${f.pm25?.let { " · PM2.5 ${it.roundToInt()}" } ?: ""}", style = barSmall, softWrap = false)
                     }
                 }
             }
         }
-        // Hours and tomorrow on the first line; the later days on a second line under them (owner
-        // 2026-11-22: "ещё 3–4 дня") — the first line already fills a 1080p row.
-        Column(Modifier.padding(start = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                f.hours.forEachIndexed { i, it -> if (i > 0) Spacer(Modifier.width(12.dp)); WeatherCell(it) }
-                if (f.tomorrow.isNotEmpty()) {
-                    Spacer(Modifier.width(12.dp))
-                    Box(Modifier.width(1.dp).height(34.dp).background(Color.White.copy(alpha = 0.3f)))
-                    Spacer(Modifier.width(12.dp))
-                    f.tomorrow.forEachIndexed { i, slot ->
-                        if (i > 0) Spacer(Modifier.width(12.dp))
-                        WeatherCell(if (i == 0) slot.copy(label = "завтра ${slot.label}") else slot)
-                    }
-                }
-            }
-            if (f.days.isNotEmpty()) {
-                Spacer(Modifier.height(3.dp))
-                // As many days as fit (3–4): the line ends near the screen edge, and a minus sign or a
-                // rain amount widens a day — a day that doesn't fit is dropped, never clipped.
-                FitRow(gap = 14.dp) { f.days.forEach { DayCell(it) } }
+        // One row (owner 2026-11-22: "в одну строку, поплотнее"): +3/+6 h | tomorrow | the next days.
+        // Gaps are 6 dp; the days go into a FitRow, which gets what's left of the row and drops the last
+        // day rather than letting it run off the screen.
+        f.hours.forEach { Spacer(Modifier.width(6.dp)); WeatherCell(it) }
+        if (f.tomorrow.isNotEmpty()) {
+            Divider()
+            f.tomorrow.forEachIndexed { i, slot ->
+                if (i > 0) Spacer(Modifier.width(6.dp))
+                // «пн утро», like the day labels after it («завтра утро» was wider).
+                WeatherCell(if (i == 0) slot.copy(label = "${tomorrowDay()} ${slot.label}") else slot)
             }
         }
-        f.place?.let { Spacer(Modifier.width(18.dp)); BasicText(it, style = barLabel) }
+        if (f.days.isNotEmpty()) {
+            Divider()
+            FitRow(gap = 6.dp) { f.days.forEach { DayCell(it) } }
+        }
     }
 }
 
@@ -483,27 +481,41 @@ private fun FitRow(gap: androidx.compose.ui.unit.Dp, content: @Composable () -> 
     }
 }
 
-/** A later day on one line: «чт ⛅ +12°/+3° ☔40%», amount when ≥ 1 mm. */
+/** Tomorrow's short weekday, «пн». */
+private fun tomorrowDay(): String = java.time.LocalDate.now().plusDays(1).dayOfWeek
+    .getDisplayName(java.time.format.TextStyle.SHORT, Locale("ru")).lowercase().take(2)
+
+@Composable
+private fun Divider() {
+    Spacer(Modifier.width(7.dp))
+    Box(Modifier.width(1.dp).height(34.dp).background(Color.White.copy(alpha = 0.3f)))
+    Spacer(Modifier.width(7.dp))
+}
+
+/** A later day, built like [WeatherCell]: «вт ☔40%» over «⛅ +12/+3°». No mm — it has to stay narrow. */
 @Composable
 private fun DayCell(d: dev.dt.kinopub.data.DaySlot) {
-    fun t(v: Int) = "${if (v > 0) "+" else ""}$v°"
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        BasicText(d.label, style = barLabel, softWrap = false)
-        Spacer(Modifier.width(3.dp))
-        BasicText(Weather.icon(d), style = barValue.copy(fontSize = 13.sp))
-        Spacer(Modifier.width(3.dp))
-        BasicText("${t(d.max)}/${t(d.min)}", style = barValue.copy(fontSize = 13.sp), softWrap = false)
-        d.precipProb?.let { Spacer(Modifier.width(3.dp)); BasicText("☔$it%", style = barSmall, softWrap = false, maxLines = 1) }
-        d.precipMm.takeIf { it >= 1 }?.let { Spacer(Modifier.width(2.dp)); BasicText("%.0fмм".format(it), style = barSmall, softWrap = false, maxLines = 1) }
+    fun t(v: Int) = "${if (v > 0) "+" else ""}$v"
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BasicText(d.label, style = barLabel, softWrap = false)
+            d.precipProb?.let { Spacer(Modifier.width(4.dp)); BasicText("☔$it%", style = barSmall, softWrap = false, maxLines = 1) }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BasicText(Weather.icon(d), style = barValue.copy(fontSize = 14.sp))
+            Spacer(Modifier.width(3.dp))
+            BasicText("${t(d.max)}/${t(d.min)}°", style = barValue.copy(fontSize = 14.sp), softWrap = false)
+        }
     }
 }
 
 @Composable
 private fun WeatherCell(s: WeatherSlot, big: Boolean = false, showLabelAbove: Boolean = true) {
     // Chance of rain always (owner 2026-11-21). It sits on the label line, which is narrower than the
-    // icon + temperature row, and the amount (≥ 0.1 mm) stays on that row: the band is one 1080p row wide.
+    // icon + temperature row, and the amount (≥ 1 mm) stays on that row: the band is one 1080p row wide.
     val prob = s.precipProb?.let { "☔$it%" }
-    val mm = s.precipMm.takeIf { it >= 0.1 }?.let { "%.1fмм".format(it).replace('.', ',') }
+    // Whole mm from 1 mm (was 0.1 mm with a decimal; owner 2026-11-22 wanted the row denser).
+    val mm = s.precipMm.takeIf { it >= 1 }?.let { "${it.roundToInt()}мм" }
     Column {
         if (showLabelAbove) Row(verticalAlignment = Alignment.CenterVertically) {
             BasicText(s.label, style = barLabel, softWrap = false)
@@ -511,9 +523,9 @@ private fun WeatherCell(s: WeatherSlot, big: Boolean = false, showLabelAbove: Bo
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (!showLabelAbove) { BasicText(s.label, style = barSmall, softWrap = false); Spacer(Modifier.width(3.dp)) }
-            BasicText(Weather.icon(s), style = barValue.copy(fontSize = if (big) 19.sp else 15.sp))
+            BasicText(Weather.icon(s), style = barValue.copy(fontSize = if (big) 19.sp else 14.sp))
             Spacer(Modifier.width(3.dp))
-            BasicText("${if (s.temp > 0) "+" else ""}${s.temp}°", style = barValue.copy(fontSize = if (big) 19.sp else 15.sp))
+            BasicText("${if (s.temp > 0) "+" else ""}${s.temp}°", style = barValue.copy(fontSize = if (big) 19.sp else 14.sp))
             if (mm != null) { Spacer(Modifier.width(3.dp)); BasicText(mm, style = barSmall, softWrap = false, maxLines = 1) }
             if (!showLabelAbove && prob != null) { Spacer(Modifier.width(3.dp)); BasicText(prob, style = barSmall, softWrap = false, maxLines = 1) }
         }
