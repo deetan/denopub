@@ -89,6 +89,12 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
 - **Playback** (`PlayerController`, an AndroidViewModel owning ExoPlayer for a session that spans
   episodes): file = highest `h` ≤ `TrackChoice.maxHeight` (HEVC preferred at equal height), URL
   hls4 → hls → http, player pinned to the chosen quality (`setForceHighestSupportedBitrate`).
+  **Buffering** (`ui/player/Buffering.kt`, owner 2026-11-22: short freezes on kino.pub lag): up to
+  3 min ahead capped at 256 MB (stock was 50 s / ~130 MB ≈ 25–30 s of pinned 4K; `largeHeap` in the
+  manifest — ExoPlayer's buffer is Java heap), 10 s re-buffer after a stall (stock 5 s), segments over
+  `AppContainer.media` (8 s connect/read timeout — the API client's 30 s let a stalled read drain the
+  buffer) with 8 retries. Trailers/live use the same source factory, stock buffer. `buffer:` log lines:
+  stall (position, ahead, net), resume time, load errors, segment loads > 4 s.
   **Voiceovers**: hls4 repeats every voice once per quality (GROUP-ID audio2160/1080/720/480), so
   ExoPlayer has one audio *TrackGroup per voiceover* with a copy per quality — an option is a
   group; overrides select the whole group; kino.pub `audios[]` metadata is matched by the "NN."

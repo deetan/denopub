@@ -47,6 +47,12 @@ Verified on the real Chromecast by the owner:
 
 ## Open items / next steps (most relevant first)
 
+0. **Playback buffering (2026-11-22, not yet on the TV)**: owner saw short freezes from server lag.
+   `Buffering.kt`: 3 min / 256 MB ahead, `largeHeap`, 8 s media timeouts, 8 retries, 10 s re-buffer.
+   Written on a Mac without a JDK — **not compiled yet**: build, deploy, watch a 4K film, then
+   `adb logcat -s denopub | grep buffer:`. If stalls still show `ahead 0s` with a low net figure, the
+   server is too slow for 4K (next: a disk cache, or let ABR drop quality); OOM in logcat → lower
+   `MAX_BYTES`. Check `getprop dalvik.vm.heapsize` on the TV.
 0. **Paintings screensaver (2026-11-15)**: `ArtDream` + Home «Картины», 910 paintings (Europe, Russia, Asia, ancient world, icons) with RU/EN
    titles and child-friendly Russian stories (`assets/art/paintings.json`). **Running on the real TV**
    since 0.3.0 (2026-11-15): `scripts/tv.sh screensaver` set it, a 20 s idle test started `ArtDream`

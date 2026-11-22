@@ -40,6 +40,14 @@ class AppContainer(app: Application) {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
         })
         .build()
+    /**
+     * Video/audio segments: a stalled read gives up after 8 s so ExoPlayer retries the segment
+     * while the buffer still has content (the API client's 30 s let it drain into a freeze).
+     */
+    val media: OkHttpClient = http.newBuilder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .build()
     val tokens = TokenStore(app)
     val api = KinopubApi(http, tokens)
     val prefs = LocalPrefs(app)
