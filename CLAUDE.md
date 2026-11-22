@@ -219,12 +219,13 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   it when away), «Сейчас» + wind and humidity («💨 8–14 м/с ↖  💧72%»: speed–gusts, arrow = where it blows
   to) + air («● AQI 87 · PM2.5 15», US AQI 0–500 as IQAir shows it — the owner asked for that index; the
   dot's colour is the level, the word was dropped for room), then +3/+6 h | «пн утро» 09:00 / день 14:00 /
-  вечер 19:00 | the next days after tomorrow («вт ☔0%» over «☀ +6/+1°», Open-Meteo `daily`, up to
+  вечер 19:00 | the next days after tomorrow («вт ☔0%» over «☀ 6/1°» — no plus sign, a minus stays; Open-Meteo `daily`, up to
   `Weather.DAYS` = 4; owner 2026-11-22: "ещё 3–4 дня, в одну строку, поплотнее" — a second line was
   rejected). Cells: emoji icon (WMO code for rain/snow/storm/fog, else cloud cover), temperature, whole mm
   if ≥ 1; chance of rain always, on the label line («15:00 ☔40%», owner 2026-11-21). The row is exactly
-  one 1080p width: the days sit in `FitRow`, which shows only the days that fit (3 on a rainy day with mm
-  everywhere, 4 on a dry one) — never let a cell run off the edge (it overflowed twice). Open-Meteo forecast + air-quality
+  one 1080p width: the days sit in `FitRow`, which shows only the days that fit (tested 2026-11-22 with forced
+  values: today's +11° rain → 3; dry summer +24…28° → 3; two-digit ± with 100 % and 12–14 mm in every
+  cell → 2) — never let a cell run off the edge (it overflowed twice). Open-Meteo forecast + air-quality
   API (keyless). Air = **PM2.5 of outdoor Sensor.Community sensors within 3 km, figure-skating style** (≥ 3 needed; lowest and highest dropped, the rest averaged — one near Palilula reads ~170 while neighbours read 5–12), humidity-corrected (κ-Köhler, `Weather.humidityCorrected`, RH from Open-Meteo — cheap sensors read 1.5–3× high in fog), converted to US AQI (EPA 2024 breakpoints, `Weather.usAqi`); fewer sensors → the CAMS model (hourly), refreshed ≤ every 15 min, cached in
   `filesDir/weather.json`. Location: Belgrade, Palilula (44.82, 20.49 — rounded on purpose, public repo);
   ipwho.is once a day — used only if > 30 km from home (owner: "Палилула дефолт, а дальше по ип"); then the

@@ -492,10 +492,10 @@ private fun Divider() {
     Spacer(Modifier.width(7.dp))
 }
 
-/** A later day, built like [WeatherCell]: «вт ☔40%» over «⛅ +12/+3°». No mm — it has to stay narrow. */
+/** A later day, built like [WeatherCell]: «вт ☔40%» over «⛅ 12/3°». No mm and no plus sign (owner 2026-11-22) — it has to stay narrow; a minus stays. */
 @Composable
 private fun DayCell(d: dev.dt.kinopub.data.DaySlot) {
-    fun t(v: Int) = "${if (v > 0) "+" else ""}$v"
+    fun t(v: Int) = "$v"
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BasicText(d.label, style = barLabel, softWrap = false)
