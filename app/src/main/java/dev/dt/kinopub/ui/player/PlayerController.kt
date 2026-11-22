@@ -88,7 +88,8 @@ class PlayerController(
             // Prefer the TV's hardware decoders (HEVC/HDR/DV); fall back to software for odd audio.
             DefaultRenderersFactory(app).setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON),
         )
-        .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(c.http)))
+        .setMediaSourceFactory(Buffering.sourceFactory(c.media))
+        .setLoadControl(Buffering.loadControl())
         .setSeekBackIncrementMs(10_000)
         .setSeekForwardIncrementMs(10_000)
         .build()
@@ -119,6 +120,8 @@ class PlayerController(
     private var mayAskRating = false
 
     init {
+        // Not [bandwidth]: that property is declared (and initialised) below this block.
+        Buffering.log(player, androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(app))
         player.addListener(object : Player.Listener {
             override fun onTracksChanged(tracks: Tracks) {
                 if (!choiceApplied && tracks.groups.isNotEmpty()) {

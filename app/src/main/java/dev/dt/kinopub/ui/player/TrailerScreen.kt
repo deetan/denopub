@@ -32,9 +32,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -49,7 +47,7 @@ fun TrailerScreen(c: AppContainer, url: String, title: String, onExit: () -> Uni
     val ctx = LocalContext.current
     val player = remember {
         ExoPlayer.Builder(ctx)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(c.http)))
+            .setMediaSourceFactory(Buffering.sourceFactory(c.media))
             .setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(10_000)
             .build().apply {
                 setMediaItem(MediaItem.Builder().setUri(url).apply { if (url.contains(".m3u8")) setMimeType(MimeTypes.APPLICATION_M3U8) }.build())
