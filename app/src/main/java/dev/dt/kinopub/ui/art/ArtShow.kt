@@ -396,15 +396,16 @@ private fun Caption(p: Painting, phase: Int, on: Boolean, place: Place, modifier
 }
 
 /** Height of the clock + weather band at the top. */
-private const val TOP_BAR = 58f
+private const val TOP_BAR = 76f
 
 private val barLabel = TextStyle(color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, shadow = Shadow(Color.Black, blurRadius = 8f))
 private val barValue = TextStyle(color = Color.White, fontSize = 17.sp, shadow = Shadow(Color.Black, blurRadius = 8f))
 private val barSmall = TextStyle(color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, shadow = Shadow(Color.Black, blurRadius = 8f))
 
 /**
- * Clock and weather (owner 2026-11-15): now, in 2/4/6 hours, tomorrow morning/day/evening — icon for
- * cloudiness/rain/snow, temperature, chance of rain (+ amount when ≥ 0.1 mm); humidity next to the wind.
+ * Clock and weather (owner 2026-11-15): now, in 3/6 hours, tomorrow morning/day/evening — icon for
+ * cloudiness/rain/snow, temperature, chance of rain (+ amount when ≥ 0.1 mm); humidity next to the wind;
+ * under the hours, the next [Weather.DAYS] days (max/min, chance of rain).
  */
 @Composable
 private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
@@ -439,17 +440,61 @@ private fun TopBar(f: dev.dt.kinopub.data.Forecast?, modifier: Modifier) {
                 }
             }
         }
-        f.hours.forEach { Spacer(Modifier.width(12.dp)); WeatherCell(it) }
-        if (f.tomorrow.isNotEmpty()) {
-            Spacer(Modifier.width(12.dp))
-            Box(Modifier.width(1.dp).height(34.dp).background(Color.White.copy(alpha = 0.3f)))
-            Spacer(Modifier.width(12.dp))
-            f.tomorrow.forEachIndexed { i, slot ->
-                if (i > 0) Spacer(Modifier.width(12.dp))
-                WeatherCell(if (i == 0) slot.copy(label = "завтра ${slot.label}") else slot)
+        // Hours and tomorrow on the first line; the later days on a second line under them (owner
+        // 2026-11-22: "ещё 3–4 дня") — the first line already fills a 1080p row.
+        Column(Modifier.padding(start = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                f.hours.forEachIndexed { i, it -> if (i > 0) Spacer(Modifier.width(12.dp)); WeatherCell(it) }
+                if (f.tomorrow.isNotEmpty()) {
+                    Spacer(Modifier.width(12.dp))
+                    Box(Modifier.width(1.dp).height(34.dp).background(Color.White.copy(alpha = 0.3f)))
+                    Spacer(Modifier.width(12.dp))
+                    f.tomorrow.forEachIndexed { i, slot ->
+                        if (i > 0) Spacer(Modifier.width(12.dp))
+                        WeatherCell(if (i == 0) slot.copy(label = "завтра ${slot.label}") else slot)
+                    }
+                }
+            }
+            if (f.days.isNotEmpty()) {
+                Spacer(Modifier.height(3.dp))
+                // As many days as fit (3–4): the line ends near the screen edge, and a minus sign or a
+                // rain amount widens a day — a day that doesn't fit is dropped, never clipped.
+                FitRow(gap = 14.dp) { f.days.forEach { DayCell(it) } }
             }
         }
         f.place?.let { Spacer(Modifier.width(18.dp)); BasicText(it, style = barLabel) }
+    }
+}
+
+/** Children left to right, [gap] apart; the ones that would cross the right edge are not shown. */
+@Composable
+private fun FitRow(gap: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(content) { ms, c ->
+        val g = gap.roundToPx()
+        val ps = ms.map { it.measure(androidx.compose.ui.unit.Constraints()) }
+        var x = 0
+        val shown = ps.takeWhile { p -> val end = x + p.width; (end <= c.maxWidth).also { if (it) x = end + g } }
+        val w = (shown.sumOf { it.width } + g * (shown.size - 1).coerceAtLeast(0)).coerceAtMost(c.maxWidth)
+        val h = shown.maxOfOrNull { it.height } ?: 0
+        layout(w, h) {
+            var px = 0
+            shown.forEach { it.placeRelative(px, (h - it.height) / 2); px += it.width + g }
+        }
+    }
+}
+
+/** A later day on one line: «чт ⛅ +12°/+3° ☔40%», amount when ≥ 1 mm. */
+@Composable
+private fun DayCell(d: dev.dt.kinopub.data.DaySlot) {
+    fun t(v: Int) = "${if (v > 0) "+" else ""}$v°"
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BasicText(d.label, style = barLabel, softWrap = false)
+        Spacer(Modifier.width(3.dp))
+        BasicText(Weather.icon(d), style = barValue.copy(fontSize = 13.sp))
+        Spacer(Modifier.width(3.dp))
+        BasicText("${t(d.max)}/${t(d.min)}", style = barValue.copy(fontSize = 13.sp), softWrap = false)
+        d.precipProb?.let { Spacer(Modifier.width(3.dp)); BasicText("☔$it%", style = barSmall, softWrap = false, maxLines = 1) }
+        d.precipMm.takeIf { it >= 1 }?.let { Spacer(Modifier.width(2.dp)); BasicText("%.0fмм".format(it), style = barSmall, softWrap = false, maxLines = 1) }
     }
 }
 

@@ -35,6 +35,18 @@ data class WeatherSlot(
     val day: Boolean,
 )
 
+/** One later day (owner 2026-11-22: 3–4 more days after tomorrow evening): icon, max/min, chance of rain. */
+@Serializable
+data class DaySlot(
+    val label: String,      // "чт"
+    val code: Int,          // WMO weather code (the day's most severe)
+    val max: Int,
+    val min: Int,
+    val cloud: Int,         // mean cloud cover, %
+    val precipProb: Int?,   // max chance of rain, %
+    val precipMm: Double,   // day total
+)
+
 @Serializable
 data class Forecast(
     val now: WeatherSlot,
@@ -48,6 +60,7 @@ data class Forecast(
     val aqi: Int? = null,              // US AQI now (0–500, as IQAir etc. show it; Open-Meteo / CAMS model, hourly)
     val pm25: Double? = null,
     val humidity: Int? = null,         // relative humidity now, %
+    val days: List<DaySlot> = emptyList(), // the DAYS days after tomorrow
 )
 
 /**
@@ -76,7 +89,8 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
                 "&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,weather_code,is_day,wind_speed_10m,wind_direction_10m,wind_gusts_10m" +
                 "&wind_speed_unit=ms" +
                 "&hourly=temperature_2m,precipitation_probability,precipitation,cloud_cover,weather_code,is_day" +
-                "&timezone=auto&forecast_days=3"
+                "&daily=weather_code,temperature_2m_max,temperature_2m_min,cloud_cover_mean,precipitation_probability_max,precipitation_sum" +
+                "&timezone=auto&forecast_days=${2 + DAYS}"
             val o = json.parseToJsonElement(fetch(url)).jsonObject
             // Air quality is a separate API; a failure there must not lose the forecast.
             val air = runCatching {
@@ -179,16 +193,39 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
         val tomorrow = listOf(9 to "утро", 14 to "день", 19 to "вечер").mapNotNull { (hr, label) ->
             times.indexOf(tomorrowDate.atTime(hr, 0)).takeIf { it >= 0 }?.let { slot(it, label) }
         }
+        val days = runCatching { days(o["daily"]!!.jsonObject, tomorrowDate) }
+            .onFailure { Log.w(TAG, "weather: daily: $it") }.getOrDefault(emptyList())
         return Forecast(
             now, hours, tomorrow, place, System.currentTimeMillis(),
+            days = days,
             windMs = cur["wind_speed_10m"]?.jsonPrimitive?.doubleOrNull,
             gustMs = cur["wind_gusts_10m"]?.jsonPrimitive?.doubleOrNull,
             windFrom = cur["wind_direction_10m"]?.jsonPrimitive?.doubleOrNull?.roundToInt(),
         )
     }
 
+    /** The [DAYS] days after [tomorrow], from Open-Meteo `daily`. */
+    private fun days(d: JsonObject, tomorrow: java.time.LocalDate): List<DaySlot> {
+        val dates = d["time"]!!.jsonArray.map { java.time.LocalDate.parse(it.jsonPrimitive.content) }
+        fun ints(k: String) = d[k]!!.jsonArray.map { it.jsonPrimitive.intOrNull }
+        fun dbls(k: String) = d[k]!!.jsonArray.map { it.jsonPrimitive.doubleOrNull }
+        val code = ints("weather_code"); val max = dbls("temperature_2m_max"); val min = dbls("temperature_2m_min")
+        val cloud = dbls("cloud_cover_mean"); val prob = ints("precipitation_probability_max"); val mm = dbls("precipitation_sum")
+        return dates.indices.filter { dates[it] > tomorrow }.take(DAYS).mapNotNull { i ->
+            val hi = max[i] ?: return@mapNotNull null
+            val lo = min[i] ?: return@mapNotNull null
+            DaySlot(
+                WEEKDAYS[dates[i].dayOfWeek.value - 1], code[i] ?: 0, hi.roundToInt(), lo.roundToInt(),
+                (cloud[i] ?: 0.0).roundToInt(), prob[i], mm[i] ?: 0.0,
+            )
+        }
+    }
+
     companion object {
         const val TAG = "denopub"
+        /** Days shown after tomorrow (owner 2026-11-22: "ещё 3–4 дня"). */
+        const val DAYS = 4
+        private val WEEKDAYS = listOf("пн", "вт", "ср", "чт", "пт", "сб", "вс")
         // Belgrade, Palilula (owner's default, 2026-11-15). Rounded to ~1 km on purpose: the repo is public,
         // and the forecast grid is coarser than that anyway.
         const val HOME_LAT = 44.82
@@ -237,6 +274,9 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
             aqi <= 300 -> "очень вредно" to 0xFF8F3F97
             else -> "опасно" to 0xFF7E0023
         }
+
+        /** Emoji for a later day: like a daytime slot. */
+        fun icon(d: DaySlot): String = icon(WeatherSlot(d.label, d.code, d.max, d.cloud, d.precipProb, d.precipMm, day = true))
 
         /** Emoji for a slot: rain/snow/storm/fog from the WMO code, otherwise by cloud cover. */
         fun icon(s: WeatherSlot): String = when (s.code) {
