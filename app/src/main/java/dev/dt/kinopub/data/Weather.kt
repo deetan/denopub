@@ -278,16 +278,17 @@ class Weather(private val http: OkHttpClient, filesDir: File) {
         /** Emoji for a later day: like a daytime slot. */
         fun icon(d: DaySlot): String = icon(WeatherSlot(d.label, d.code, d.max, d.cloud, d.precipProb, d.precipMm, day = true))
 
-        /** Emoji for a slot: rain/snow/storm/fog from the WMO code, otherwise by cloud cover. */
+        /** Emoji for a slot: rain/snow/storm/fog from the WMO code, otherwise by cloud cover. Text-default
+ * symbols carry U+FE0F, or they draw as a flat white glyph (🌨 looked like a white square, 2026-11-22). */
         fun icon(s: WeatherSlot): String = when (s.code) {
-            95, 96, 99 -> "⛈"
-            71, 73, 75, 77, 85, 86 -> "🌨"
-            51, 53, 55, 56, 57 -> "🌦"
-            61, 63, 65, 66, 67, 80, 81, 82 -> "🌧"
-            45, 48 -> "🌫"
+            95, 96, 99 -> "⛈️"
+            71, 73, 75, 77, 85, 86 -> "❄️"
+            51, 53, 55, 56, 57 -> "🌦️"
+            61, 63, 65, 66, 67, 80, 81, 82 -> "🌧️"
+            45, 48 -> "🌫️"
             else -> when {
                 s.cloud < 20 -> if (s.day) "☀️" else "🌙"
-                s.cloud < 50 -> if (s.day) "🌤" else "🌙"
+                s.cloud < 50 -> if (s.day) "🌤️" else "🌙"
                 s.cloud < 85 -> "⛅"
                 else -> "☁️"
             }

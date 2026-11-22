@@ -533,7 +533,7 @@ function logGlyphs(): void {
     const g = c.getContext('2d') as CanvasRenderingContext2D;
     g.font = '28px sans-serif';
     const tofu = g.measureText('\uFFFF').width;
-    const out = ['☀️', '⛅', '🌧', '🌨', '💨', '💧', '☔', '↖'].map((ch) => {
+    const out = ['☀️', '⛅', '🌧', '❄️', '💨', '💧', '☔', '↖'].map((ch) => {
       g.clearRect(0, 0, 40, 40);
       g.fillStyle = '#808080';
       g.fillText(ch, 4, 30);

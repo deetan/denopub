@@ -161,17 +161,18 @@ export function aqiLevel(aqi: number): [string, string] {
   return [S.aqiHazardous, '#7E0023'];
 }
 
-/** Emoji for a slot: rain/snow/storm/fog from the WMO code, otherwise by cloud cover. */
+/** Emoji for a slot: rain/snow/storm/fog from the WMO code, otherwise by cloud cover. Text-default
+ * symbols carry U+FE0F, or they draw as a flat white glyph (🌨 looked like a white square, 2026-11-22). */
 export function icon(s: WeatherSlot): string {
   switch (s.code) {
-    case 95: case 96: case 99: return '⛈';
-    case 71: case 73: case 75: case 77: case 85: case 86: return '🌨';
-    case 51: case 53: case 55: case 56: case 57: return '🌦';
-    case 61: case 63: case 65: case 66: case 67: case 80: case 81: case 82: return '🌧';
-    case 45: case 48: return '🌫';
+    case 95: case 96: case 99: return '⛈️';
+    case 71: case 73: case 75: case 77: case 85: case 86: return '❄️';
+    case 51: case 53: case 55: case 56: case 57: return '🌦️';
+    case 61: case 63: case 65: case 66: case 67: case 80: case 81: case 82: return '🌧️';
+    case 45: case 48: return '🌫️';
     default:
       if (s.cloud < 20) return s.day ? '☀️' : '🌙';
-      if (s.cloud < 50) return s.day ? '🌤' : '🌙';
+      if (s.cloud < 50) return s.day ? '🌤️' : '🌙';
       if (s.cloud < 85) return '⛅';
       return '☁️';
   }

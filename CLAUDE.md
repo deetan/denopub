@@ -221,7 +221,7 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   dot's colour is the level, the word was dropped for room), then +3/+6 h | «пн утро» 09:00 / день 14:00 /
   вечер 19:00 | the next days after tomorrow («вт ☔0%» over «☀ 6/1°» — no plus sign, a minus stays; Open-Meteo `daily`, up to
   `Weather.DAYS` = 4; owner 2026-11-22: "ещё 3–4 дня, в одну строку, поплотнее" — a second line was
-  rejected). Cells: emoji icon (WMO code for rain/snow/storm/fog, else cloud cover), temperature, whole mm
+  rejected). Cells: emoji icon (WMO code for rain/snow/storm/fog, else cloud cover; snow = ❄️, and text-default symbols need U+FE0F or they draw as a white blob), temperature, whole mm
   if ≥ 1; chance of rain always, on the label line («15:00 ☔40%», owner 2026-11-21). The row is exactly
   one 1080p width: the days sit in `FitRow`, which shows only the days that fit (tested 2026-11-22 with forced
   values: today's +11° rain → 3; dry summer +24…28° → 3; two-digit ± with 100 % and 12–14 mm in every
