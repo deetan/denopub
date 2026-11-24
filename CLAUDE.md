@@ -200,7 +200,7 @@ Google TV. One user, remote-only, built for "resume what I'm watching in one cli
   one); dealt from a persisted shuffled deck (no repeats until all shown). Images: Commons
   `Special:FilePath?width=` 1280 (portrait) / 1920 / 3840 (panorama) with a descriptive User-Agent;
   copyrighted 20th-century works by direct URL (owner accepted that) — never store images in the
-  repo. One painting = 40 s (owner 2026-11-22, both platforms; briefly 30 s): 2 s
+  repo. One painting = 50 s on Android (owner 2026-11-24; Natapub 40 s; was 40 s, briefly 30 s): 2 s
   clean → title block → story at 4 s → clean for the last 4 s; a 4 dp white bar along the bottom fills
   until the switch (restarts on ← →); the next painting is dealt and pre-loaded into Coil's cache so the
   switch lands on time; 2.5 s cross-fade. **Text never covers the painting if it can help it** (owner

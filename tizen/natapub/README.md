@@ -147,7 +147,7 @@ certificate. A fresh install has no token: the TV shows a device code (also logg
   other key wakes; the waking key is swallowed until its keyup (`keys.ts` `setOverlay`), also
   when the Search field had DOM focus. The TV's own screensaver is off while the paintings (or the
   player) are up and back on otherwise. App hidden / TV off → overlay closes, idle clock restarts.
-  Timing: **40 s per painting** (`SLIDE_MS`, owner 2026-11-22, same as Android; briefly 30 s), caption at 2 s,
+  Timing: **40 s per painting** (`SLIDE_MS`, owner 2026-11-22; Android has 50 s since 2026-11-24; briefly 30 s), caption at 2 s,
   story at 4 s, clean for the last 4 s,
   2.5 s cross-fade, 4 dp progress bar, next image downloaded while the current one shows. Layout:
   caption heights measured in the DOM (against a 100 dp reference, so `zoom` cancels out), rooms
